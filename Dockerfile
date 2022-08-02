@@ -34,17 +34,6 @@ RUN apt install -y \
 RUN apt install -y \
     vim
 
-#ARG OPENCV_VERSION=3.4.18
-#RUN cd $CODE_DIR && \
-#    git clone --depth 1 --branch $OPENCV_VERSION https://github.com/opencv/opencv.git &&\
-#    cd opencv && \
-#    mkdir build && cd build &&\
-#    cmake .. &&\
-#    make -j `nproc` install
-
-#RUN sh -c 'echo "/usr/local/lib" >> /etc/ld.so.conf.d/opencv.conf'
-#RUN ldconfig
-
 # YCM
 ARG YCM_VERSION=v0.14.0
 RUN cd $CODE_DIR && \
@@ -78,9 +67,9 @@ RUN cd $CODE_DIR &&\
 
 # event-driven
 
-ARG ED_VERSION=master
+ARG ED_VERSION=ev2-dev
 RUN cd $CODE_DIR &&\
-    git clone --depth 1 --branch master https://github.com/robotology/event-driven.git &&\
+    git clone --depth 1 --branch $ED_VERSION https://github.com/robotology/event-driven.git &&\
     cd event-driven &&\
     mkdir build && cd build &&\
     cmake .. &&\
