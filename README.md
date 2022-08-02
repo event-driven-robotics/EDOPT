@@ -19,5 +19,5 @@ docker build -t sixdof:latest --ssh default --build-arg ssh_pub_key="$(cat ~/.ss
 Make the container using:
 
 ```
-docker run -it -privileged -v /dev/bus/usb:/dev/bus/usb -v /tmp/.X11-unix/:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY --network host --gpus all --name sixdofdev sixdof:latest
+docker run -it --privileged -v /dev/bus/usb:/dev/bus/usb -v /tmp/.X11-unix/:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY --network host --gpus all --name sixdofdev sixdof:latest
 ```
