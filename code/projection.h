@@ -4,7 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <yarp/os/all.h>
 
-SICAD* createProjectorClass(yarp::os::ResourceFinder &config, std::string model_name)
+SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
 {
 
 
@@ -20,7 +20,7 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config, std::string model_
     }
     std::string object_path = config.find("object_path").asString();
     SICAD::ModelPathContainer obj;
-    obj.emplace(model_name, object_path);
+    obj.emplace("model", object_path);
 
         yInfo() << "Creating SICAD class with object: " << object_path
                 << "and parameters" << intrinsic_parameters.toString();
@@ -32,8 +32,7 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config, std::string model_
                      intrinsic_parameters.find("fx").asDouble(),
                      intrinsic_parameters.find("fy").asDouble(),
                      intrinsic_parameters.find("cx").asDouble(),
-                     intrinsic_parameters.find("cy").asDouble(),
-                     1);
+                     intrinsic_parameters.find("cy").asDouble());
 
 }
 

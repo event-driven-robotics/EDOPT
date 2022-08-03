@@ -15,7 +15,7 @@ private:
 
     EROSdirect eros_handler;
 
-    std::vector<double> state = {0, 0, -400, 0.0, -1.0, 0.0, 0};
+    std::vector<double> state = {0, 0, -200, 0.0, -1.0, 0.0, 0};
     SICAD* si_cad;
 
 public:
@@ -26,14 +26,16 @@ public:
         double bias_sens = rf.check("s", Value(0.4)).asFloat64();
         double cam_filter = rf.check("f", Value(0.01)).asFloat64();
 
+
+        si_cad = createProjectorClass(rf);
+        if(!si_cad)
+            return false;
+
+        
         if(!eros_handler.start(bias_sens, cam_filter)) 
         {
             return false;
         }
-
-        si_cad = createProjectorClass(rf, "car");
-        if(!si_cad)
-            return false;
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", eros_handler.res);
@@ -57,11 +59,14 @@ public:
 
         cv::Mat projected_image;
         Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-        if (!simpleProjection(si_cad.get(), pose, projected_image)) {
+        if (!simpleProjection(si_cad, pose, projected_image)) {
             yError() << "Could not perform projection";
             return false;
         }
         cv::imshow("Projection", projected_image);
+        state[6] += 0.1;
+        normalise_quaternion(state);
+
 
         cv::waitKey(1);
         return true;
