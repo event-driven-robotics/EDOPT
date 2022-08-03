@@ -25,7 +25,7 @@ find_package(event-driven REQUIRED)
 #                          USE_LINK_PATH)
 
 add_executable(sixdofobject main.cpp)
-target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
+#target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
 target_link_libraries(sixdofobject PRIVATE  YARP_init
                                             YARP_os
                                             event-driven

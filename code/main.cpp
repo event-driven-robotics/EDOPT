@@ -10,32 +10,31 @@ using namespace yarp::os;
 
 #include <event-driven/core.h>
 #include <event-driven/algs.h>
+#include <event-driven/vis.h>
 
-class tracker : public yarp::os::RFModule 
+class EROSasynch
 {
-private:
-
+public:
     Metavision::Camera cam;
     ev::EROS eros;
+    ev::vNoiseFilter filter;
     cv::Size res;
 
-
-    void erosUpdate(const Metavision::EventCD *ev_begin, const Metavision::EventCD *ev_end)
+    bool start(double sensitivity, double filter_value)
     {
-        for(auto &v = ev_begin; v != ev_end; ++v) 
+        if(sensitivity < 0.0 || sensitivity > 1.0)
         {
-            eros.update(v->x, v->y);
+            yError() << "sensitivity 0 < s < 1";
+            return false;
         }
-    }
-
-public:
-
-    bool configure(yarp::os::ResourceFinder& rf) override
-    {
-        (void)rf;
 
         try {
             cam = Camera::from_first_available();
+            I_LL_Biases* bias_control = cam.biases().get_facility();  
+            int diff_on  = (66 - 350) * sensitivity + 650 - 66;
+            int diff_off = (66 + 200) * sensitivity + 100 - 66;
+            bias_control->set("bias_diff_on", diff_on);
+            bias_control->set("bias_diff_off", diff_off);
         } catch(const std::exception &e) {
             yError() << "no camera :(";
             return false;
@@ -46,18 +45,56 @@ public:
 
         res =  cv::Size(geo.width(), geo.height());
         eros.init(res.width, res.height, 7, 0.3);
+        filter.use_temporal_filter(filter_value);
+        filter.initialise(res.width, res.height);
 
         cam.cd().add_callback([this](const Metavision::EventCD *ev_begin, const Metavision::EventCD *ev_end) {
             this->erosUpdate(ev_begin, ev_end);
         });
 
-        if(!cam.start()) {
+        if (!cam.start()) {
             yError() << "Could not start the camera";
             return false;
         }
 
+        return true;
+    }
+
+    void erosUpdate(const Metavision::EventCD *ev_begin, const Metavision::EventCD *ev_end) 
+    {
+        double t = yarp::os::Time::now();
+        for(auto &v = ev_begin; v != ev_end; ++v) 
+        {
+            if(filter.check(v->x, v->y, v->p, t))
+                eros.update(v->x, v->y);
+        }
+    }
+
+};
+
+class tracker : public yarp::os::RFModule 
+{
+private:
+
+    EROSasynch eros_handler;
+    cv::Size res;
+
+public:
+
+    bool configure(yarp::os::ResourceFinder& rf) override
+    {
+
+        double bias_sens = rf.check("s", Value(0.4)).asFloat64();
+        double cam_filter = rf.check("f", Value(0.01)).asFloat64();
+
+        if(!eros_handler.start(bias_sens, cam_filter)) 
+        {
+            return false;
+        }
+
+
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
-        cv::resizeWindow("EROS", res);
+        cv::resizeWindow("EROS", eros_handler.res);
 
         return true;
     }
@@ -68,8 +105,8 @@ public:
     }
     bool updateModule() override
     {
-        static cv::Mat mysurf; 
-        eros.getSurface().copyTo(mysurf);
+        static cv::Mat mysurf;
+        eros_handler.eros.getSurface().copyTo(mysurf);
         cv::imshow("EROS", mysurf);
         cv::waitKey(1);
         return true;
