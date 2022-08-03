@@ -15,7 +15,7 @@ private:
 
     EROSdirect eros_handler;
 
-    std::vector<double> state = {0, 0, -200, 0.0, -1.0, 0.0, 0};
+    std::vector<double> state = {0, 0, -100, 0.0, -1.0, 0.0, 0};
     SICAD* si_cad;
 
 public:
@@ -54,7 +54,12 @@ public:
     {
         static cv::Mat mysurf;
         eros_handler.eros.getSurface().copyTo(mysurf);
-        cv::imshow("EROS", mysurf);
+        cv::GaussianBlur(mysurf, mysurf, cv::Size(7, 7), 0);
+        cv::Mat eros_temp;// = preprocimg(mysurf);
+        mysurf.convertTo(eros_temp, CV_32F);
+        cv::normalize(eros_temp, eros_temp, 0.0, 1.0, cv::NORM_MINMAX);
+        //cv::imshow("EROS", mysurf);
+        //cv::Canny(mysurf, eros_temp, 40, 40*3);
         
 
         cv::Mat projected_image;
@@ -63,9 +68,21 @@ public:
             yError() << "Could not perform projection";
             return false;
         }
-        cv::imshow("Projection", projected_image);
-        state[6] += 0.1;
-        normalise_quaternion(state);
+
+        cv::Mat edges = mhat(projected_image);
+
+
+        
+         cv::Mat muld = edges.mul(eros_temp);
+         yInfo() << cv::sum(cv::sum(muld))[0];
+        
+        edges = edges + eros_temp;
+        cv::imshow("Projection", edges+0.5);
+
+
+        cv::imshow("EROS", eros_temp);
+        //state[6] += 0.1;
+        //normalise_quaternion(state);
 
 
         cv::waitKey(1);
