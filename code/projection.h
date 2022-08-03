@@ -3,7 +3,7 @@
 #include <SuperimposeMesh/SICAD.h>
 #include <opencv2/opencv.hpp>
 #include <yarp/os/all.h>
-#include <opencv2/opencv.hpp>
+
 
 SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
 {
@@ -167,43 +167,3 @@ Superimpose::ModelPose euler_to_axisangle(const std::vector<double> &state)
 }
 
 
-cv::Mat preprocimg(cv::Mat projected)
-{
-    static cv::Mat canny_img;
-    cv::Canny(projected, canny_img, 40, 40*3, 3);
-    cv::dilate(canny_img, canny_img, cv::Mat());
-    //cv::GaussianBlur(canny_img, canny_img, cv::Size(5, 5), 0);
-    return canny_img;
-}
-
-cv::Mat mhat(cv::Mat projected)
-{
-    static cv::Mat canny_img, f, pos_hat, neg_hat;
-    cv::Canny(projected, canny_img, 40, 40*3, 3);
-    
-    //cv::dilate(canny_img, canny_img, cv::Mat());
-    canny_img.convertTo(f, CV_32F);
-    cv::GaussianBlur(f, pos_hat, cv::Size(21, 21), 0);
-    cv::GaussianBlur(f, neg_hat, cv::Size(41, 41), 0);
-
-    cv::Mat grey = cv::Mat::zeros(canny_img.size(), CV_32F);
-    grey -= neg_hat;
-    grey += pos_hat;
-
-    double minval, maxval;
-    cv::minMaxLoc(grey, &minval, &maxval);
-    maxval = 2*std::max(fabs(minval), fabs(maxval));
-    grey /= maxval;
-
-    return grey;
-}
-
-cv::Mat erosproc(cv::Mat eros_img)
-{
-    //get the summed image with kernel 7x7
-
-    //get the difference between 
-
-    return cv::Mat();
-
-}

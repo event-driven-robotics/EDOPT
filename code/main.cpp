@@ -8,6 +8,9 @@ using namespace yarp::os;
 
 #include "erosdirect.h"
 #include "projection.h"
+#include "comparison.h"
+
+
 
 class tracker : public yarp::os::RFModule 
 {
@@ -52,15 +55,7 @@ public:
     }
     bool updateModule() override
     {
-        static cv::Mat mysurf;
-        eros_handler.eros.getSurface().copyTo(mysurf);
-        cv::GaussianBlur(mysurf, mysurf, cv::Size(7, 7), 0);
-        cv::Mat eros_temp;// = preprocimg(mysurf);
-        mysurf.convertTo(eros_temp, CV_32F);
-        cv::normalize(eros_temp, eros_temp, 0.0, 1.0, cv::NORM_MINMAX);
-        //cv::imshow("EROS", mysurf);
-        //cv::Canny(mysurf, eros_temp, 40, 40*3);
-        
+        cv::Mat eros_f = process_eros(eros_handler.eros.getSurface());   
 
         cv::Mat projected_image;
         Superimpose::ModelPose pose = quaternion_to_axisangle(state);
@@ -68,19 +63,15 @@ public:
             yError() << "Could not perform projection";
             return false;
         }
+        cv::Mat proj_f = process_projected(projected_image);
 
-        cv::Mat edges = mhat(projected_image);
-
-
+        yInfo() << similarity_score(eros_f, proj_f);
         
-         cv::Mat muld = edges.mul(eros_temp);
-         yInfo() << cv::sum(cv::sum(muld))[0];
-        
-        edges = edges + eros_temp;
-        cv::imshow("Projection", edges+0.5);
+        //edges = edges + eros_temp;
+        cv::imshow("Projection", make_visualisation(eros_f, proj_f));
 
 
-        cv::imshow("EROS", eros_temp);
+        //cv::imshow("EROS", eros_temp);
         //state[6] += 0.1;
         //normalise_quaternion(state);
 
