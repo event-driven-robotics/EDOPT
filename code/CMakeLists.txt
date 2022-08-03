@@ -24,7 +24,7 @@ find_package(event-driven REQUIRED)
 #                          INSTALL_NAME_DIR "${CMAKE_INSTALL_FULL_LIBDIR}"
 #                          USE_LINK_PATH)
 
-add_executable(sixdofobject main.cpp)
+add_executable(sixdofobject main.cpp projection.h erosdirect.h )
 #target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
 target_link_libraries(sixdofobject PRIVATE  YARP_init
                                             YARP_os
