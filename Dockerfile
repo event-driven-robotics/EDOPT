@@ -1,4 +1,5 @@
-FROM ubuntu:20.04
+#FROM ubuntu:20.04
+FROM nvidia/cuda:11.7.0-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND noninteractive
 
 ARG CODE_DIR=/usr/local/src
