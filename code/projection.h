@@ -100,7 +100,7 @@ void normalise_quaternion(std::vector<double> &state)
     state[6] *= normval;
 }
 
-Superimpose::ModelPose quaternion_to_axisangle(const std::vector<double> &state)
+Superimpose::ModelPose quaternion_to_axisangle(const std::array<double, 7> &state)
 {
     Superimpose::ModelPose pose;
     pose.resize(7);
