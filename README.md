@@ -14,7 +14,7 @@ Build the docker using:
 
 ```
 cd object-track-6dof
-docker build -t sixdof:latest --ssh default --build-arg ssh_pub_key="$(cat ~/.ssh/<publicKeyFile>.pub)" --build-arg ssh_prv_key="$(cat ~/.ssh/<privateKeyFile>)" - < Dockerfile
+docker build -t sixdof:latest --ssh default --build-arg ssh_pub_key="$(cat ~/.ssh/id_rsa.pub)" --build-arg ssh_prv_key="$(cat ~/.ssh/id_rsa)" - < Dockerfile
 ```
 Make the container using:
 
