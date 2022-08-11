@@ -16,13 +16,18 @@ class tracker : public yarp::os::RFModule
 {
 private:
 
+    std::thread worker;
     EROSdirect eros_handler;
 
     predictions warp_handler;
     std::array<double, 6> intrinsics;
 
-    std::array<double, 7> state = {0, 0, -100, 0.0, -1.0, 0.0, 0};
+    std::array<double, 7> default_state = {0, 0, -150, 0.0, -1.0, 0.0, 0};
+    std::array<double, 7> state;
     SICAD* si_cad;
+
+    cv::Mat vis;
+    double rate;
 
 public:
 
@@ -44,6 +49,8 @@ public:
         intrinsics[4] = intrinsic_parameters.find("fx").asDouble();
         intrinsics[5] = intrinsic_parameters.find("fy").asDouble();
 
+        state = default_state;
+
         si_cad = createProjectorClass(rf);
         if(!si_cad)
             return false;
@@ -64,8 +71,11 @@ public:
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", eros_handler.res);
+        vis = cv::Mat::zeros(eros_handler.res, CV_8UC3);
 
-        cv::namedWindow("Projection", cv::WINDOW_AUTOSIZE);
+        worker = std::thread([this]{main_loop();});
+
+        //cv::namedWindow("Projection", cv::WINDOW_AUTOSIZE);
         //cv::resizeWindow("Projection", eros_handler.res);
 
         return true;
@@ -73,43 +83,64 @@ public:
 
     double getPeriod() override
     {
-        return 0;
+        return 0.1;
     }
+
     bool updateModule() override
     {
-        cv::Mat eros_f = process_eros(eros_handler.eros.getSurface()); 
-        //cv::Mat eros_f = cv::Mat::zeros(intrinsics[1], intrinsics[0], CV_32F);
 
-        cv::Mat projected_image;
-        //yInfo() << state[0] << state[1] << state[2] << state[3] << state[4] << state[5] << state[6];
-        Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-        if (!simpleProjection(si_cad, pose, projected_image)) {
-            yError() << "Could not perform projection";
-            return false;
-        }
-        cv::Mat proj_f = process_projected(projected_image);
-
-        warp_handler.set_projection(state, proj_f);
-        warp_handler.predict_x();
-        warp_handler.predict_y();
-        state = warp_handler.score(eros_f);
-        cv::Mat vis = warp_handler.create_visualisation();
-
-        //yInfo() << similarity_score(eros_f, proj_f);
-        cv::imshow("EROS", make_visualisation(eros_f, proj_f));
-        cv::imshow("Projection", vis+0.5);
-        cv::waitKey(1);
-        
-
+        cv::imshow("EROS", vis);
+        // cv::imshow("Projection", vis+0.5);
+        int c = cv::waitKey(1);
+        if (c == 32)
+            state = default_state;
+        yInfo() << rate;
         return true;
+    }
+
+
+
+    void main_loop()
+    {
+        int dp = 2;
+        while (!isStopping()) {
+            // double tic = Time::now();
+            double tic = Time::now();
+            cv::Mat eros_f = process_eros(eros_handler.eros.getSurface());
+
+            cv::Mat projected_image;
+            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
+            if (!simpleProjection(si_cad, pose, projected_image)) {
+                yError() << "Could not perform projection";
+                return;
+            }
+            cv::Mat proj_f = process_projected(projected_image, 30);
+
+            warp_handler.set_current(state);
+            warp_handler.set_projection(state, proj_f);
+            warp_handler.reset_comparison(eros_f);
+            warp_handler.compare_to_warp_x(eros_f, dp);
+            warp_handler.compare_to_warp_y(eros_f, dp);
+            warp_handler.compare_to_warp_z(eros_f, dp);
+            state = warp_handler.next_best();
+            //cv::Mat vis = warp_handler.create_visualisation(predictions::z);
+            vis = make_visualisation(eros_f, proj_f);
+
+            rate = 1.0 / (Time::now() - tic);
+
+            // yInfo() << 1.0 / (Time::now() - tic);
+        }
     }
 
     // bool interruptModule() override
     // {
     // }
-    // bool close() override
-    // {
-    // }
+    bool close() override
+    {
+        yInfo() << "waiting for worker"; 
+        worker.join();
+        return true;
+    }
 
 };
 
