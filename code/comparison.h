@@ -260,20 +260,44 @@ public:
 
     }
 
-    cv::Mat create_visualisation(axis_name an) {
+    cv::Mat create_translation_visualisation() 
+    {
+        static cv::Mat joined = cv::Mat::zeros(cp[h]*3, cp[w]*3, CV_32F);
+        static cv::Mat joined_scaled = cv::Mat::zeros(cp[h], cp[w], CV_32F);
+
+        if(image_projection.empty()) return joined_scaled;
 
         score_overlay(score_projection, image_projection);
-        score_overlay(scores_p[an], warps_p[an]);
-        score_overlay(scores_n[an], warps_n[an]);
+        for(auto an = 0; an < scores_p.size(); an++) {
+            score_overlay(scores_p[an], warps_p[an]);
+            score_overlay(scores_n[an], warps_n[an]);
+        }
+        int col = 0; int row = 0;
 
-        cv::Mat joined(cp[h], cp[w]*3, CV_32F);
-        warps_n[an].copyTo(joined(cv::Rect(0, 0, cp[w], cp[h])));
-        image_projection.copyTo(joined(cv::Rect(cp[w], 0, cp[w], cp[h])));
-        warps_p[an].copyTo(joined(cv::Rect(cp[w]*2, 0, cp[w], cp[h])));
-        
-        
+        col = 1; row = 1;
+        image_projection.copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
 
-        return joined;
+        col = 0; row = 1;
+        warps_n[x].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+
+        col = 2; row = 1;
+        warps_p[x].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+
+        col = 1; row = 0;
+        warps_n[y].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+
+        col = 1; row = 2;
+        warps_p[y].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+
+        col = 0; row = 0;
+        warps_n[z].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+
+        col = 2; row = 2;
+        warps_p[z].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+
+        cv::resize(joined, joined_scaled, joined_scaled.size());
+
+        return joined_scaled;
 
     }
 };

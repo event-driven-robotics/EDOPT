@@ -26,7 +26,7 @@ private:
     std::array<double, 7> state;
     SICAD* si_cad;
 
-    cv::Mat vis;
+    cv::Mat eros_f, proj_f;
     double rate;
 
 public:
@@ -39,9 +39,10 @@ public:
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
-            yError() << "Could not load camera parameters";
+            yError() << "Wrong .ini file or [CAMERA_CALIBRATION] not present. Deal breaker.";
             return false;
         }
+
         intrinsics[0] = intrinsic_parameters.find("w").asInt();
         intrinsics[1] = intrinsic_parameters.find("h").asInt();
         intrinsics[2] = intrinsic_parameters.find("cx").asDouble();
@@ -71,12 +72,13 @@ public:
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", eros_handler.res);
-        vis = cv::Mat::zeros(eros_handler.res, CV_8UC3);
+        eros_f = cv::Mat::zeros(eros_handler.res, CV_32F);
+        proj_f = cv::Mat::zeros(eros_handler.res, CV_32F);
 
         worker = std::thread([this]{main_loop();});
 
-        //cv::namedWindow("Projection", cv::WINDOW_AUTOSIZE);
-        //cv::resizeWindow("Projection", eros_handler.res);
+        cv::namedWindow("Projection", cv::WINDOW_AUTOSIZE);
+        cv::resizeWindow("Projection", eros_handler.res);
 
         return true;
     }
@@ -88,9 +90,12 @@ public:
 
     bool updateModule() override
     {
-
+        static cv::Mat vis;
+        vis = make_visualisation(eros_f, proj_f);
+        static cv::Mat warps = cv::Mat::zeros(100, 100, CV_8U);
+        warps = warp_handler.create_translation_visualisation();
         cv::imshow("EROS", vis);
-        // cv::imshow("Projection", vis+0.5);
+        cv::imshow("Projection", warps+0.5);
         int c = cv::waitKey(1);
         if (c == 32)
             state = default_state;
@@ -106,7 +111,7 @@ public:
         while (!isStopping()) {
             // double tic = Time::now();
             double tic = Time::now();
-            cv::Mat eros_f = process_eros(eros_handler.eros.getSurface());
+            eros_f = process_eros(eros_handler.eros.getSurface());
 
             cv::Mat projected_image;
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
@@ -114,7 +119,7 @@ public:
                 yError() << "Could not perform projection";
                 return;
             }
-            cv::Mat proj_f = process_projected(projected_image, 30);
+            proj_f = process_projected(projected_image, 30);
 
             warp_handler.set_current(state);
             warp_handler.set_projection(state, proj_f);
@@ -123,12 +128,7 @@ public:
             warp_handler.compare_to_warp_y(eros_f, dp);
             warp_handler.compare_to_warp_z(eros_f, dp);
             state = warp_handler.next_best();
-            //cv::Mat vis = warp_handler.create_visualisation(predictions::z);
-            vis = make_visualisation(eros_f, proj_f);
-
             rate = 1.0 / (Time::now() - tic);
-
-            // yInfo() << 1.0 / (Time::now() - tic);
         }
     }
 
@@ -137,7 +137,6 @@ public:
     // }
     bool close() override
     {
-        yInfo() << "waiting for worker"; 
         worker.join();
         return true;
     }
@@ -148,6 +147,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
+    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);

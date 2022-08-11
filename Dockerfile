@@ -33,7 +33,8 @@ RUN apt install -y \
 
 #my favourites
 RUN apt install -y \
-    vim
+    vim \
+    gdb
 
 # YCM
 ARG YCM_VERSION=v0.14.0
