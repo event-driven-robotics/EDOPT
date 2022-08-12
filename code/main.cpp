@@ -22,12 +22,13 @@ private:
     predictions warp_handler;
     std::array<double, 6> intrinsics;
 
-    std::array<double, 7> default_state = {0, 0, -150, 0.0, -1.0, 0.0, 0};
+    std::array<double, 7> default_state = {0, 0, -300, 0.0, -1.0, 0.0, 0};
     std::array<double, 7> state;
     SICAD* si_cad;
 
     cv::Mat eros_f, proj_f;
     double rate;
+    bool step{true};
 
 public:
 
@@ -99,6 +100,8 @@ public:
         int c = cv::waitKey(1);
         if (c == 32)
             state = default_state;
+        if (c == 'g')
+            step = true;
         yInfo() << rate;
         return true;
     }
@@ -107,7 +110,8 @@ public:
 
     void main_loop()
     {
-        int dp = 2;
+        int dp = 1;
+        int blur = 20;
         while (!isStopping()) {
             // double tic = Time::now();
             double tic = Time::now();
@@ -119,7 +123,7 @@ public:
                 yError() << "Could not perform projection";
                 return;
             }
-            proj_f = process_projected(projected_image, 30);
+            proj_f = process_projected(projected_image, blur);
 
             warp_handler.set_current(state);
             warp_handler.set_projection(state, proj_f);
@@ -127,7 +131,10 @@ public:
             warp_handler.compare_to_warp_x(eros_f, dp);
             warp_handler.compare_to_warp_y(eros_f, dp);
             warp_handler.compare_to_warp_z(eros_f, dp);
-            state = warp_handler.next_best();
+            if(step) {
+                state = warp_handler.next_best();
+                step = true;
+            }
             rate = 1.0 / (Time::now() - tic);
         }
     }

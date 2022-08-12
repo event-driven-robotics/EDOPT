@@ -28,12 +28,12 @@ cv::Mat process_projected(cv::Mat projected, int blur = 40)
 
 cv::Mat process_eros(cv::Mat eros_img)
 {
-    static cv::Mat eros_blurred, eros_f;
+    static cv::Mat eros_blurred, eros_f, eros_fn;
     cv::GaussianBlur(eros_img, eros_blurred, cv::Size(7, 7), 0);
     eros_blurred.convertTo(eros_f, CV_32F);
-    cv::normalize(eros_f, eros_f, 0.0, 1.0, cv::NORM_MINMAX);
+    cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
 
-    return eros_f;
+    return eros_fn;
 
 }
 
@@ -120,8 +120,8 @@ private:
     std::array<cv::Mat, 6> warps_n; 
     std::array<std::array<double, 7>, 6> states_p;
     std::array<std::array<double, 7>, 6> states_n;
-    std::array<double, 6> scores_p;
-    std::array<double, 6> scores_n;
+    std::array<double, 6> scores_p = {-DBL_MAX};
+    std::array<double, 6> scores_n = {-DBL_MAX};
 
 public:
 
@@ -136,6 +136,7 @@ public:
     {
         state_current = state;
         d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
+        //d = state[2];
     }
 
     void set_projection(const std::array<double, 7> &state, const cv::Mat &image)
@@ -153,8 +154,7 @@ public:
             s = state_current;
 
         score_projection = similarity_score(obs, image_projection);
-        scores_p = {-DBL_MAX};
-        scores_n = {-DBL_MAX};
+
     }
 
     void compare_to_warp_x(const cv::Mat &obs, int dp) 
@@ -192,8 +192,8 @@ public:
         // calculate the state change given interactive matrix
         // dx = du * d / fx
         // yInfo() << (8 * d /cp[fx]) *0.001;
-        states_p[y][y] += (dp * d / cp[fy]);
-        states_n[y][y] -= (dp * d / cp[fy]);
+        states_p[y][y] -= (dp * d / cp[fy]);
+        states_n[y][y] += (dp * d / cp[fy]);
 
         // state[0] += 1 * d / cp[fx];
         scores_p[y] = similarity_score(obs, warps_p[y]);
@@ -231,7 +231,7 @@ public:
     {
 
         std::array<double, 7> best_state = state_projection;
-        double best_score = score_projection;
+        double best_score = score_projection;// > 0 ? score_projection : 0;
 
         for(int i = 0; i < scores_p.size(); i++) 
         {
@@ -265,36 +265,56 @@ public:
         static cv::Mat joined = cv::Mat::zeros(cp[h]*3, cp[w]*3, CV_32F);
         static cv::Mat joined_scaled = cv::Mat::zeros(cp[h], cp[w], CV_32F);
 
-        if(image_projection.empty()) return joined_scaled;
-
-        score_overlay(score_projection, image_projection);
-        for(auto an = 0; an < scores_p.size(); an++) {
-            score_overlay(scores_p[an], warps_p[an]);
-            score_overlay(scores_n[an], warps_n[an]);
-        }
         int col = 0; int row = 0;
 
-        col = 1; row = 1;
-        image_projection.copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+        if (!image_projection.empty()) {
+            col = 1; row = 1;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            image_projection.copyTo(roi);
+            score_overlay(score_projection, roi);
+        }
 
-        col = 0; row = 1;
-        warps_n[x].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+        if(!warps_n[x].empty()) {
+            col = 0; row = 1;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[x].copyTo(roi);
+            score_overlay(scores_n[x], roi);
+        }
 
-        col = 2; row = 1;
-        warps_p[x].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+        if(!warps_p[x].empty()) {
+            col = 2; row = 1;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[x].copyTo(roi);
+            score_overlay(scores_p[x], roi);
+        }
 
-        col = 1; row = 0;
-        warps_n[y].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+        if(!warps_n[y].empty()) {
+            col = 1; row = 0;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[y].copyTo(roi);
+            score_overlay(scores_n[y], roi);
+        }
 
-        col = 1; row = 2;
-        warps_p[y].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+        if(!warps_p[y].empty()) {
+            col = 1; row = 2;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[y].copyTo(roi);
+            score_overlay(scores_p[y], roi);
+        }
 
-        col = 0; row = 0;
-        warps_n[z].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
+        if(!warps_n[z].empty()) {
+            col = 0; row = 0;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[z].copyTo(roi);
+            score_overlay(scores_n[z], roi);
+        }
 
-        col = 2; row = 2;
-        warps_p[z].copyTo(joined(cv::Rect(cp[w]*col, cp[h]*row, cp[w], cp[h])));
-
+        if(!warps_p[z].empty()) {
+            col = 2; row = 2;
+            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[z].copyTo(roi);
+            score_overlay(scores_p[z], roi);
+        }
         cv::resize(joined, joined_scaled, joined_scaled.size());
 
         return joined_scaled;
