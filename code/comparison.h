@@ -113,6 +113,7 @@ private:
     std::array<double, 7> state_projection;
     cv::Mat image_projection;
     double score_projection;
+    cv::Rect roi_projection;
 
     double default_dp = 8;
 
@@ -136,7 +137,6 @@ public:
     {
         state_current = state;
         d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
-        //d = state[2];
     }
 
     void set_projection(const std::array<double, 7> &state, const cv::Mat &image)
@@ -154,6 +154,14 @@ public:
             s = state_current;
 
         score_projection = similarity_score(obs, image_projection);
+
+    }
+
+    void extract_roi(cv::Mat projected)
+    {
+        static cv::Mat grey;
+        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
+        roi_projection = cv::boundingRect(grey);
 
     }
 
@@ -206,6 +214,11 @@ public:
         // lets move m pixel -> D% = 1 - m / DM
         // lets move m pixel -> d% = 1 + m / DM
         static cv::Mat M;
+        //cv::Rect roi = cv::boundingRect(image_projection);
+        // double dmx = std::max(fabs(roi_projection.x - cp[cx]), fabs(roi_projection.x + roi_projection.width - cp[cx]));
+        //  double dmy = std::max(fabs(roi_projection.y - cp[cy]), fabs(roi_projection.y + roi_projection.height - cp[cy]));
+        //  double dm = sqrt(dmx*dmx + dmy*dmy);
+        //yInfo() << roi_projection.;
         double dm = (cp[w] * 0.5);
         double dperc = dp / dm;
 

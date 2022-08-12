@@ -28,7 +28,7 @@ private:
 
     cv::Mat eros_f, proj_f;
     double rate;
-    bool step{true};
+    bool step{false};
 
 public:
 
@@ -73,6 +73,7 @@ public:
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", eros_handler.res);
+        cv::moveWindow("EROS", 1920, 0);
         eros_f = cv::Mat::zeros(eros_handler.res, CV_32F);
         proj_f = cv::Mat::zeros(eros_handler.res, CV_32F);
 
@@ -80,6 +81,7 @@ public:
 
         cv::namedWindow("Projection", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Projection", eros_handler.res);
+        cv::moveWindow("Projection", 1920, 540);
 
         return true;
     }
@@ -102,7 +104,9 @@ public:
             state = default_state;
         if (c == 'g')
             step = true;
-        yInfo() << rate;
+        if(c == 27)
+            return false;
+        //yInfo() << rate;
         return true;
     }
 
@@ -123,14 +127,16 @@ public:
                 yError() << "Could not perform projection";
                 return;
             }
+            
             proj_f = process_projected(projected_image, blur);
 
+            warp_handler.extract_roi(projected_image);
             warp_handler.set_current(state);
             warp_handler.set_projection(state, proj_f);
             warp_handler.reset_comparison(eros_f);
             warp_handler.compare_to_warp_x(eros_f, dp);
             warp_handler.compare_to_warp_y(eros_f, dp);
-            warp_handler.compare_to_warp_z(eros_f, dp*0.5);
+            warp_handler.compare_to_warp_z(eros_f, dp);
             if(step) {
                 state = warp_handler.next_best();
                 step = true;
