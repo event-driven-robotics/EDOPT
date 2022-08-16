@@ -3,25 +3,26 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
-cv::Mat process_projected(cv::Mat projected, int blur = 40)
+cv::Mat process_projected(const cv::Mat &projected, int blur = 10)
 {
     static cv::Mat canny_img, f, pos_hat, neg_hat;
+    static cv::Mat grey = cv::Mat::zeros(projected.size(), CV_32F);
+
     cv::Canny(projected, canny_img, 40, 40*3, 3);
+    canny_img.convertTo(f, CV_32F);
 
     blur = blur % 2 ? blur : blur + 1;
     
-    canny_img.convertTo(f, CV_32F);
     cv::GaussianBlur(f, pos_hat, cv::Size(blur, blur), 0);
     cv::GaussianBlur(f, neg_hat, cv::Size(2*blur-1, 2*blur-1), 0);
-
-    cv::Mat grey = cv::Mat::zeros(canny_img.size(), CV_32F);
-    grey -= neg_hat;
+    grey = 0;
     grey += pos_hat;
+    grey -= neg_hat;
 
     double minval, maxval;
     cv::minMaxLoc(grey, &minval, &maxval);
-    maxval = 2*std::max(fabs(minval), fabs(maxval));
-    grey /= maxval;
+    double scale_factor = 1.0 / (2*std::max(fabs(minval), fabs(maxval)));
+    grey *= scale_factor;
 
     return grey;
 }
@@ -29,11 +30,11 @@ cv::Mat process_projected(cv::Mat projected, int blur = 40)
 cv::Mat process_eros(cv::Mat eros_img)
 {
     static cv::Mat eros_blurred, eros_f, eros_fn;
-    cv::GaussianBlur(eros_img, eros_blurred, cv::Size(7, 7), 0);
-    eros_blurred.convertTo(eros_f, CV_32F);
-    cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
+    //cv::GaussianBlur(eros_img, eros_blurred, cv::Size(7, 7), 0);
+    eros_img.convertTo(eros_f, CV_32F, 0.003921569);
+    //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
 
-    return eros_fn;
+    return eros_f;
 
 }
 
@@ -215,13 +216,15 @@ public:
         // lets move m pixel -> d% = 1 + m / DM
         static cv::Mat M;
         //cv::Rect roi = cv::boundingRect(image_projection);
-        // double dmx = std::max(fabs(roi_projection.x - cp[cx]), fabs(roi_projection.x + roi_projection.width - cp[cx]));
-        //  double dmy = std::max(fabs(roi_projection.y - cp[cy]), fabs(roi_projection.y + roi_projection.height - cp[cy]));
+        double dmx = std::max(fabs(roi_projection.x - cp[cx]), fabs(roi_projection.x + roi_projection.width - cp[cx]));
+        double dmy = std::max(fabs(roi_projection.y - cp[cy]), fabs(roi_projection.y + roi_projection.height - cp[cy]));
         //  double dm = sqrt(dmx*dmx + dmy*dmy);
-        //yInfo() << roi_projection.;
-        double dm = (cp[w] * 0.5);
+        
+        //double dm = (cp[w] * 0.5);
+        double dm = std::max(dmx, dmy);
         double dperc = dp / dm;
 
+        //yInfo() << dmx << 1-dperc << 1+dperc;
         
         M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 - dperc);
         cv::warpAffine(image_projection, warps_n[z], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);

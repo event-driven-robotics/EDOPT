@@ -27,7 +27,7 @@ private:
     SICAD* si_cad;
 
     cv::Mat eros_f, proj_f;
-    double rate;
+    double tic, toc_eros, toc_proj, toc_projproc, toc_warp;
     bool step{false};
 
 public:
@@ -106,7 +106,10 @@ public:
             step = true;
         if(c == 27)
             return false;
-        //yInfo() << rate;
+        yInfo() << (int)toc_eros << "\t" 
+                << (int)toc_proj << "\t"
+                << (int)toc_projproc << "\t"
+                << (int)toc_warp;
         return true;
     }
 
@@ -120,15 +123,20 @@ public:
             // double tic = Time::now();
             double tic = Time::now();
             eros_f = process_eros(eros_handler.eros.getSurface());
+            double toc_eros = Time::now();
 
+        
             cv::Mat projected_image;
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
             if (!simpleProjection(si_cad, pose, projected_image)) {
                 yError() << "Could not perform projection";
                 return;
             }
+            double toc_proj = Time::now();
             
             proj_f = process_projected(projected_image, blur);
+
+            double toc_projproc = Time::now();
 
             warp_handler.extract_roi(projected_image);
             warp_handler.set_current(state);
@@ -141,7 +149,13 @@ public:
                 state = warp_handler.next_best();
                 step = true;
             }
-            rate = 1.0 / (Time::now() - tic);
+            double toc_warp = Time::now();
+            //rate = 1.0 / (Time::now() - tic);
+
+            this->toc_eros= ((toc_eros - tic) * 10e3);
+            this->toc_proj= ((toc_proj - toc_eros) * 10e3);
+            this->toc_projproc = ((toc_projproc - toc_proj) * 10e3);
+            this->toc_warp= ((toc_warp - toc_projproc) * 10e3);
         }
     }
 
