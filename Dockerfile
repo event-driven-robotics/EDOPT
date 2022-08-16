@@ -1,6 +1,8 @@
 #FROM ubuntu:20.04
 FROM nvidia/opengl:1.2-glvnd-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND noninteractive
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
 
 ARG CODE_DIR=/usr/local/src
 
