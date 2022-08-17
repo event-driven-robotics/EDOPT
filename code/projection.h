@@ -56,8 +56,8 @@ bool simpleProjection(SICAD *si_cad, Superimpose::ModelPose pose, cv::Mat &image
     Superimpose::ModelPoseContainer objpose_map;
     objpose_map.emplace("model", pose);
 
-    std::vector<double> cam_pos = {0, 0, 0};
-    std::vector<double> cam_rot = {1, 0, 0, 0}; //{0 0 0 0} is invalid
+    static std::vector<double> cam_pos = {0, 0, 0};
+    static std::vector<double> cam_rot = {1, 0, 0, 0}; //{0 0 0 0} is invalid
 
     return si_cad->superimpose(objpose_map, cam_pos.data(), cam_rot.data(), image);
 

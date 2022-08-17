@@ -126,11 +126,12 @@ public:
             double toc_eros = Time::now();
 
         
-            cv::Mat projected_image;
+            static cv::Mat projected_image = cv::Mat::zeros(eros_f.size(), CV_8UC3);
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
             if (!simpleProjection(si_cad, pose, projected_image)) {
                 yError() << "Could not perform projection";
                 return;
+
             }
             double toc_proj = Time::now();
             

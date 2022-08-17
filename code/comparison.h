@@ -7,17 +7,16 @@ cv::Mat process_projected(const cv::Mat &projected, int blur = 10)
 {
     static cv::Mat canny_img, f, pos_hat, neg_hat;
     static cv::Mat grey = cv::Mat::zeros(projected.size(), CV_32F);
+    blur = blur % 2 ? blur : blur + 1;
 
     cv::Canny(projected, canny_img, 40, 40*3, 3);
     canny_img.convertTo(f, CV_32F);
 
-    blur = blur % 2 ? blur : blur + 1;
-    
     cv::GaussianBlur(f, pos_hat, cv::Size(blur, blur), 0);
     cv::GaussianBlur(f, neg_hat, cv::Size(2*blur-1, 2*blur-1), 0);
-    grey = 0;
-    grey += pos_hat;
+    pos_hat.copyTo(grey);
     grey -= neg_hat;
+    //grey = pos_hat - neg_hat;
 
     double minval, maxval;
     cv::minMaxLoc(grey, &minval, &maxval);
@@ -67,39 +66,14 @@ cv::Mat make_visualisation(cv::Mat observation, cv::Mat expectation)
     return rgb_img;
 }
 
-void calculate_state_deltas()
-{
-    //from the interaction matrix and current depth calculate the desired state
-    //change to move the image by approximately 1 pixel.
+// from the interaction matrix and current depth calculate the desired state
+// change to move the image by approximately 1 pixel.
 
-    //[du dv] =
-    //[ fx/d, 0, -(u-cx)/d, -(u-cx)(v-cy)/fy, fx*fx+(u-cx)(u-cx)/fx, -(v-cy)fx/fy
-    //  0, fy/d, -(v-cy)/d, -(fy*fy)-(v-cy)(v-cy)/fy, (u-cx)(v-cy)/fx, (u-cx)fy/fx] *
+//[du dv] =
+//[ fx/d, 0, -(u-cx)/d, -(u-cx)(v-cy)/fy, fx*fx+(u-cx)(u-cx)/fx, -(v-cy)fx/fy
+//  0, fy/d, -(v-cy)/d, -(fy*fy)-(v-cy)(v-cy)/fy, (u-cx)(v-cy)/fx, (u-cx)fy/fx] *
 
-    // [dx, dy, dz, dalpha, dbeta, dgamma]
-
-    // where d = sqrt(x^2 + y^2 + z^2)
-
-    // MAX(u-cx) = mu
-    // MAX(v-cy) = mv
-
-    std::vector<double> dstate(6);
-
-    //du = fx/d * dx
-    //dx = du * d / fx;
-    
-    //dv = fy/d * dy
-    //dy = dv * d / fy
-    
-    //du = -mu/d * dz
-    //dv = -mv/d * dz
-    //dz = MAX(-du*d/mu, -dv*d/mv) careful of negatives with max
-
-    //
-
-
-
-}
+// [dx, dy, dz, dalpha, dbeta, dgamma]
 
 class predictions {
 
