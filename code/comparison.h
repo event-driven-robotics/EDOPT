@@ -241,6 +241,7 @@ public:
 
     void compare_to_warp_c(const cv::Mat &obs, int dp) 
     {
+        //roll
 
         //angle to rotate by 
         double theta = atan2(dp, std::max(roi.width, roi.height)*0.5);
@@ -248,25 +249,20 @@ public:
         //three point formula//three point formula
         //du = -(v-cy)fx/fy * dc
         //dv = (u-cx)fy/fx * dc
-        static std::array<cv::Point2f, 3> src;
-        src[0] = cv::Point2f(0, 0);
-        src[1] = cv::Point2f(roi.width, 0);
-        src[2] = cv::Point2f(0, roi.height);
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = roi.width;
+        src[2].y = roi.height;
 
         cv::Point cen(roi.width*0.5, roi.height*0.5);
 
-        //this can be optimised as delta_p should be negative of dst_n, dst_p
         static std::array<cv::Point2f, 3> dst_n, dst_p;
         for(int i = 0; i < dst_n.size(); i++) 
         {
-            dst_n[i] = cv::Point2f(-(src[i].y-cen.y)*cp[fx]/cp[fy]*theta, 
-                                  (src[i].x-cen.x)*cp[fy]/cp[fx]*theta) 
-                                  + src[i];
-            dst_p[i] = cv::Point2f(-(src[i].y-cen.y)*cp[fx]/cp[fy]*-theta, 
-                                  (src[i].x-cen.x)*cp[fy]/cp[fx]*-theta) 
-                                  + src[i];
+            dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cp[fx] / cp[fy] * theta,
+                                   (src[i].x - cen.x) * cp[fy] / cp[fx] * theta);
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
         }
-
         static cv::Mat M;
 
         M = cv::getAffineTransform(src, dst_p);
@@ -276,16 +272,49 @@ public:
         cv::warpAffine(image_projection(roi), warps_n[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
-        // dx = du * d / fx
-        // yInfo() << (8 * d /cp[fx]) *0.001;
-        //dc = -(v-cy)fx/fy/du;
-        //but we need to conert to quarternion.
         perform_rotation(states_p[c], 0, theta);
         perform_rotation(states_n[c], 0, -theta);
-        //states_p[y][y] -= (dp * d / cp[fy]);
-        //states_n[y][y] += (dp * d / cp[fy]);
 
-        // state[0] += 1 * d / cp[fx];
+        scores_p[c] = similarity_score(obs, warps_p[c](roi));
+        scores_n[c] = similarity_score(obs, warps_n[c](roi));
+    }
+
+    void compare_to_warp_b(const cv::Mat &obs, int dp) 
+    {
+        //yaw
+
+        //angle to rotate by 
+        double theta = atan2(dp, std::max(roi.width, roi.height)*0.5);
+
+        //three point formula//three point formula
+        //du = -(v-cy)fx/fy * dc
+        //dv = (u-cx)fy/fx * dc
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = roi.width;
+        src[2].y = roi.height;
+
+        cv::Point cen(roi.width*0.5, roi.height*0.5);
+
+        static std::array<cv::Point2f, 3> dst_n, dst_p;
+        for(int i = 0; i < dst_n.size(); i++) 
+        {
+            dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cp[fx] / cp[fy] * theta,
+                                   (src[i].x - cen.x) * cp[fy] / cp[fx] * theta);
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
+        }
+        static cv::Mat M;
+
+        M = cv::getAffineTransform(src, dst_p);
+        cv::warpAffine(image_projection(roi), warps_p[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        M = cv::getAffineTransform(src, dst_n);
+        cv::warpAffine(image_projection(roi), warps_n[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        // calculate the state change given interactive matrix
+        perform_rotation(states_p[c], 0, theta);
+        perform_rotation(states_n[c], 0, -theta);
+        
         scores_p[c] = similarity_score(obs, warps_p[c](roi));
         scores_n[c] = similarity_score(obs, warps_n[c](roi));
     }
