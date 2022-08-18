@@ -94,7 +94,7 @@ private:
     std::array<double, 7> state_projection;
     cv::Mat image_projection;
     double score_projection;
-    cv::Rect roi_projection;
+    cv::Rect roi;
 
     double default_dp = 8;
 
@@ -116,6 +116,8 @@ public:
             warps_p[i] = cv::Mat::zeros(cp[h], cp[w], CV_32F);
             warps_n[i] = cv::Mat::zeros(cp[h], cp[w], CV_32F);
         }
+        image_projection = cv::Mat::zeros(cp[h], cp[w], CV_32F);
+        roi = cv::Rect(0, 0, cp[w], cp[h]);
     }
 
     void set_current(const std::array<double, 7> &state)
@@ -124,10 +126,12 @@ public:
         d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
     }
 
-    void set_projection(const std::array<double, 7> &state, const cv::Mat &image)
+    void set_projection(const std::array<double, 7> &state, const cv::Mat &image, const cv::Rect& next_roi)
     {
         state_projection = state;
-        image.copyTo(image_projection);
+        image_projection(roi) = 0; //clear the old projection
+        image.copyTo(image_projection(next_roi)); //copy the next projection
+        roi = next_roi; //set the roi
     }
 
     void reset_comparison(const cv::Mat &obs)
@@ -138,7 +142,7 @@ public:
         for (auto &s : states_n)
             s = state_current;
 
-        score_projection = similarity_score(obs, image_projection);
+        score_projection = similarity_score(obs, image_projection(roi));
 
     }
 
@@ -148,14 +152,21 @@ public:
         static cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 1, 0, 1, 0);
 
         M.at<double>(0, 2) = dp;
-        cv::warpAffine(image_projection, warps_p[x], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(image_projection(roi), warps_p[x](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        // cv::Mat proi = image_projection(roi);
         // cv::Rect left = cv::Rect(0, 0, obs.cols-dp, obs.rows);
         // cv::Rect right = cv::Rect(dp, 0, obs.cols-dp, obs.rows);
-        // warps_p[x] = cv::Mat::zeros(obs.size(), CV_32F);
-        // obs(cv::Rect(dp, 0, obs.cols-dp, obs.rows)) = obs(cv::Rect(0, 0, obs.cols-dp, obs.rows))
+
+        // cv::Mat wroi_p = warps_p[x](roi);
+        // wroi_p = 0;
+        // wroi_p(right) = proi(left);
 
         M.at<double>(0, 2) = -dp;
-        cv::warpAffine(image_projection, warps_n[x], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(image_projection(roi), warps_n[x](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        // cv::Mat wroi_n = warps_n[x](roi);
+        // wroi_n = 0;
+        // wroi_n(left) = proi(right);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -163,8 +174,8 @@ public:
         states_p[x][x] += (dp * d /cp[fx]);
         states_n[x][x] -= (dp * d /cp[fx]);
 
-        scores_p[x] = similarity_score(obs, warps_p[x]);
-        scores_n[x] = similarity_score(obs, warps_n[x]);
+        scores_p[x] = similarity_score(obs, warps_p[x](roi));
+        scores_n[x] = similarity_score(obs, warps_n[x](roi));
     }
 
     void compare_to_warp_y(const cv::Mat &obs, int dp) 
@@ -173,10 +184,10 @@ public:
         static cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, 1);
 
         M.at<double>(1, 2) = dp;
-        cv::warpAffine(image_projection, warps_p[y], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(image_projection(roi), warps_p[y](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         M.at<double>(1, 2) = -dp;
-        cv::warpAffine(image_projection, warps_n[y], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(image_projection(roi), warps_n[y](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -185,8 +196,8 @@ public:
         states_n[y][y] += (dp * d / cp[fy]);
 
         // state[0] += 1 * d / cp[fx];
-        scores_p[y] = similarity_score(obs, warps_p[y]);
-        scores_n[y] = similarity_score(obs, warps_n[y]);
+        scores_p[y] = similarity_score(obs, warps_p[y](roi));
+        scores_n[y] = similarity_score(obs, warps_n[y](roi));
     }
 
     void compare_to_warp_z(const cv::Mat &obs, int dp)  
@@ -196,8 +207,8 @@ public:
         // lets move m pixel -> d% = 1 + m / DM
         static cv::Mat M;
         //cv::Rect roi = cv::boundingRect(image_projection);
-        double dmx = std::max(fabs(roi_projection.x - cp[cx]), fabs(roi_projection.x + roi_projection.width - cp[cx]));
-        double dmy = std::max(fabs(roi_projection.y - cp[cy]), fabs(roi_projection.y + roi_projection.height - cp[cy]));
+        double dmx = std::max(fabs(roi.x - cp[cx]), fabs(roi.x + roi.width - cp[cx]));
+        double dmy = std::max(fabs(roi.y - cp[cy]), fabs(roi.y + roi.height - cp[cy]));
         //  double dm = sqrt(dmx*dmx + dmy*dmy);
         
         //double dm = (cp[w] * 0.5);

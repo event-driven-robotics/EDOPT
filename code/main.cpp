@@ -115,8 +115,10 @@ public:
             state = default_state;
         if (c == 'g')
             step = true;
-        if(c == 27)
+        if(c == 27) {
+            stopModule();
             return false;
+        }
         yInfo() << (int)toc_eros << "\t" 
                 << (int)toc_proj << "\t"
                 << (int)toc_projproc << "\t"
@@ -140,7 +142,7 @@ public:
     void main_loop()
     {
         int dp = 4;
-        int blur = 10;
+        int blur = 12;
         while (!isStopping()) {
 
             double tic = Time::now();
@@ -163,7 +165,7 @@ public:
             double toc_eros = Time::now();
             
             warp_handler.set_current(state);
-            warp_handler.set_projection(state, proj_f);
+            warp_handler.set_projection(state, proj_f, roi);
             warp_handler.reset_comparison(eros_f);
             warp_handler.compare_to_warp_x(eros_f, dp);
             warp_handler.compare_to_warp_y(eros_f, dp);
