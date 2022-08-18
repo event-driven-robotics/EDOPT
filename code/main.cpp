@@ -19,6 +19,11 @@ private:
     std::thread worker;
     EROSdirect eros_handler;
 
+    cv::Size img_size;
+    cv::Size proc_size;
+    cv::Rect roi;
+    cv::Size2f proc_scale;
+
     predictions warp_handler;
     std::array<double, 6> intrinsics;
 
@@ -26,7 +31,7 @@ private:
     std::array<double, 7> state;
     SICAD* si_cad;
 
-    cv::Mat eros_f, proj_f;
+    cv::Mat eros_u, eros_f, proj_f;
     double tic, toc_eros, toc_proj, toc_projproc, toc_warp;
     bool step{false};
 
@@ -71,12 +76,18 @@ public:
 
         warp_handler.set_intrinsics(intrinsics);
 
+        img_size = eros_handler.res;
+        roi = cv::Rect(cv::Point(0, 0), img_size);
+        proc_size = cv::Size(80, 80);
+
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", eros_handler.res);
         cv::moveWindow("EROS", 1920, 0);
+
+        eros_u = cv::Mat::zeros(eros_handler.res, CV_8U);
         eros_f = cv::Mat::zeros(eros_handler.res, CV_32F);
         proj_f = cv::Mat::zeros(eros_handler.res, CV_32F);
-
+        
         worker = std::thread([this]{main_loop();});
 
         cv::namedWindow("Projection", cv::WINDOW_AUTOSIZE);
@@ -94,11 +105,11 @@ public:
     bool updateModule() override
     {
         static cv::Mat vis;
-        vis = make_visualisation(eros_f, proj_f);
+        vis = make_visualisation(eros_u, proj_f, roi);
         static cv::Mat warps = cv::Mat::zeros(100, 100, CV_8U);
-        warps = warp_handler.create_translation_visualisation();
+        //warps = warp_handler.create_translation_visualisation();
         cv::imshow("EROS", vis);
-        cv::imshow("Projection", warps+0.5);
+        //cv::imshow("Projection", warps+0.5);
         int c = cv::waitKey(1);
         if (c == 32)
             state = default_state;
@@ -113,50 +124,60 @@ public:
         return true;
     }
 
-
+    void set_roi(cv::Mat projected, int buffer)
+    {
+        static cv::Mat grey;
+        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
+        roi = cv::boundingRect(grey);
+        roi.x -= buffer; roi.y-= buffer;
+        roi.width += buffer*2; roi.height += buffer*2;
+        //limit the roi to the image space.        
+        roi = roi & cv::Rect(cv::Point(0, 0), img_size);
+        proc_scale.height = (double)roi.height / (double)img_size.height;
+        proc_scale.width = (double)roi.width / (double)img_size.width;
+    }
 
     void main_loop()
     {
         int dp = 4;
         int blur = 10;
         while (!isStopping()) {
-            // double tic = Time::now();
-            double tic = Time::now();
-            eros_f = process_eros(eros_handler.eros.getSurface());
-            double toc_eros = Time::now();
 
-        
-            static cv::Mat projected_image = cv::Mat::zeros(eros_f.size(), CV_8UC3);
+            double tic = Time::now();
+
+            static cv::Mat projected_image = cv::Mat::zeros(eros_handler.res, CV_8UC3);
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
             if (!simpleProjection(si_cad, pose, projected_image)) {
                 yError() << "Could not perform projection";
                 return;
 
             }
+            set_roi(projected_image, blur+dp);
             double toc_proj = Time::now();
-            
-            proj_f = process_projected(projected_image, blur);
 
+            proj_f = process_projected(projected_image(roi), proc_size, blur);
             double toc_projproc = Time::now();
 
-            warp_handler.extract_roi(projected_image);
+            eros_handler.eros.getSurface().copyTo(eros_u);
+            eros_f = process_eros(eros_u(roi), proc_size);
+            double toc_eros = Time::now();
+            
             warp_handler.set_current(state);
             warp_handler.set_projection(state, proj_f);
             warp_handler.reset_comparison(eros_f);
             warp_handler.compare_to_warp_x(eros_f, dp);
             warp_handler.compare_to_warp_y(eros_f, dp);
-            warp_handler.compare_to_warp_z(eros_f, dp);
+            // warp_handler.compare_to_warp_z(eros_f, dp);
             if(step) {
                 state = warp_handler.next_best();
                 step = true;
             }
             double toc_warp = Time::now();
-            //rate = 1.0 / (Time::now() - tic);
 
-            this->toc_eros= ((toc_eros - tic) * 10e3);
-            this->toc_proj= ((toc_proj - toc_eros) * 10e3);
+            this->toc_eros= ((toc_eros - toc_projproc) * 10e3);
+            this->toc_proj= ((toc_proj - tic) * 10e3);
             this->toc_projproc = ((toc_projproc - toc_proj) * 10e3);
-            this->toc_warp= ((toc_warp - toc_projproc) * 10e3);
+            this->toc_warp= ((toc_warp - toc_eros) * 10e3);
         }
     }
 

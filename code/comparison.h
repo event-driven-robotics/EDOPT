@@ -3,12 +3,13 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
-cv::Mat process_projected(const cv::Mat &projected, int blur = 10)
+cv::Mat process_projected(const cv::Mat &projected, cv::Size psize, int blur = 10)
 {
-    static cv::Mat canny_img, f, pos_hat, neg_hat;
-    static cv::Mat grey = cv::Mat::zeros(projected.size(), CV_32F);
+    static cv::Mat rszd_img, canny_img, f, pos_hat, neg_hat;
+    static cv::Mat grey = cv::Mat::zeros(psize, CV_32F);
     blur = blur % 2 ? blur : blur + 1;
 
+    //cv::resize(projected, rszd_img, psize);
     cv::Canny(projected, canny_img, 40, 40*3, 3);
     canny_img.convertTo(f, CV_32F);
 
@@ -26,10 +27,11 @@ cv::Mat process_projected(const cv::Mat &projected, int blur = 10)
     return grey;
 }
 
-cv::Mat process_eros(cv::Mat eros_img)
+cv::Mat process_eros(cv::Mat eros_img, cv::Size psize)
 {
-    static cv::Mat eros_blurred, eros_f, eros_fn;
+    static cv::Mat eros_blurred, eros_f, eros_fn, eros_rs;
     //cv::GaussianBlur(eros_img, eros_blurred, cv::Size(7, 7), 0);
+    //cv::resize(eros_img, eros_rs, psize);
     eros_img.convertTo(eros_f, CV_32F, 0.003921569);
     //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
 
@@ -37,29 +39,33 @@ cv::Mat process_eros(cv::Mat eros_img)
 
 }
 
-double similarity_score(cv::Mat observation, cv::Mat expectation)
+double similarity_score(const cv::Mat& observation, const cv::Mat& expectation)
 {
-    cv::Mat muld = expectation.mul(observation);
+    static cv::Mat muld;
+    muld = expectation.mul(observation);
     return cv::sum(cv::sum(muld))[0];
 }
 
-cv::Mat make_visualisation(cv::Mat observation, cv::Mat expectation)
+cv::Mat make_visualisation(cv::Mat observation, cv::Mat expectation, cv::Rect roi)
 {
     cv::Mat rgb_img, temp, temp8;
     std::vector<cv::Mat> channels;
     channels.resize(3);
-
-    //blue = positive space
-    cv::threshold(expectation, temp, 0.0, 0.5, cv::THRESH_TOZERO);
-    temp.convertTo(channels[0], CV_8U, 1024);
-
+    channels[0] = cv::Mat::zeros(observation.size(), CV_8U);
+    channels[2] = cv::Mat::zeros(observation.size(), CV_8U);
     //green = events
-    observation.convertTo(channels[1], CV_8U, 200);
+    observation.copyTo(channels[1]);
 
-    //red = negative space
+    // blue = positive space
+    cv::threshold(expectation, temp, 0.0, 0.5, cv::THRESH_TOZERO);
+    cv::resize(temp, temp, roi.size());
+    temp.convertTo(channels[0](roi), CV_8U, 1024);
+
+    // red = negative space
     temp = expectation * -1.0;
     cv::threshold(temp, temp, 0.0, 0.5, cv::THRESH_TOZERO);
-    temp.convertTo(channels[2], CV_8U, 1024);
+    cv::resize(temp, temp, roi.size());
+    temp.convertTo(channels[2](roi), CV_8U, 1024);
 
     cv::merge(channels, rgb_img);
 
@@ -106,6 +112,10 @@ public:
     void set_intrinsics(const std::array<double, 6> parameters)
     {
         cp = parameters;
+        for(int i = 0; i < warps_p.size(); i++) {
+            warps_p[i] = cv::Mat::zeros(cp[h], cp[w], CV_32F);
+            warps_n[i] = cv::Mat::zeros(cp[h], cp[w], CV_32F);
+        }
     }
 
     void set_current(const std::array<double, 7> &state)
@@ -132,14 +142,6 @@ public:
 
     }
 
-    void extract_roi(cv::Mat projected)
-    {
-        static cv::Mat grey;
-        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
-        roi_projection = cv::boundingRect(grey);
-
-    }
-
     void compare_to_warp_x(const cv::Mat &obs, int dp) 
     {
         // we want to move the image by 1 in the x axis
@@ -147,6 +149,10 @@ public:
 
         M.at<double>(0, 2) = dp;
         cv::warpAffine(image_projection, warps_p[x], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        // cv::Rect left = cv::Rect(0, 0, obs.cols-dp, obs.rows);
+        // cv::Rect right = cv::Rect(dp, 0, obs.cols-dp, obs.rows);
+        // warps_p[x] = cv::Mat::zeros(obs.size(), CV_32F);
+        // obs(cv::Rect(dp, 0, obs.cols-dp, obs.rows)) = obs(cv::Rect(0, 0, obs.cols-dp, obs.rows))
 
         M.at<double>(0, 2) = -dp;
         cv::warpAffine(image_projection, warps_n[x], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
@@ -196,7 +202,7 @@ public:
         
         //double dm = (cp[w] * 0.5);
         double dm = std::max(dmx, dmy);
-        double dperc = dp / dm;
+        double dperc = dp / dm; 
 
         //yInfo() << dmx << 1-dperc << 1+dperc;
         
