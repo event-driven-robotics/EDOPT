@@ -166,4 +166,52 @@ Superimpose::ModelPose euler_to_axisangle(const std::vector<double> &state)
     return pose;
 }
 
+void normalise_quaternion(std::array<double, 4> &q)
+{
+
+    double normval = 1.0 / sqrt(q[0]*q[0] + q[1]*q[1] +
+                                q[2]*q[2] + q[3]*q[3]);
+    q[0] *= normval;
+    q[1] *= normval;
+    q[2] *= normval;
+    q[3] *= normval;
+}
+
+std::array<double, 4> quaternion_rotation(const std::array<double, 4> &q1, const std::array<double, 4> &q2)
+{
+    std::array<double, 4> q3;
+    q3[3] = q1[3]*q2[3] - q1[0]*q2[0] - q1[1]*q2[1] - q1[2]*q2[2];
+    q3[0] = q1[3]*q2[0] + q1[0]*q2[3] - q1[1]*q2[2] + q1[2]*q2[1];
+    q3[1] = q1[3]*q2[1] + q1[0]*q2[2] + q1[1]*q2[3] - q1[2]*q2[0];
+    q3[2] = q1[3]*q2[2] - q1[0]*q2[1] + q1[1]*q2[0] + q1[2]*q2[3];
+    normalise_quaternion(q3);
+    return q3;
+} 
+
+std::array<double, 4> create_quaternion(int axis, double radians)
+{
+    std::array<double, 4> q{0};
+    axis %= 3;
+    radians *= 0.5;
+    q[axis] = sin(radians);
+    q[3] = cos(radians);
+    return q;
+}
+
+
+void perform_rotation(std::array<double, 7> &state, int axis, double radians)
+{
+    axis %= 3;
+    std::array<double, 4> rq = create_quaternion(axis, radians);
+    std::array<double, 4> q;
+    q[0] = state[3];
+    q[1] = state[4];
+    q[2] = state[5];
+    q[3] = state[6];
+    std::array<double, 4> fq = quaternion_rotation(q, rq);
+    state[3] = fq[0];
+    state[4] = fq[1];
+    state[5] = fq[2];
+    state[6] = fq[3];
+}
 

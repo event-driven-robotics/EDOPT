@@ -2,6 +2,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include "projection.h"
 
 cv::Mat process_projected(const cv::Mat &projected, cv::Size psize, int blur = 10)
 {
@@ -213,15 +214,20 @@ public:
         
         //double dm = (cp[w] * 0.5);
         double dm = std::max(dmx, dmy);
-        double dperc = dp / dm; 
+        //double dperc = dp / dm; 
 
         //yInfo() << dmx << 1-dperc << 1+dperc;
-        
-        M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 - dperc);
-        cv::warpAffine(image_projection, warps_n[z], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::Rect roi_small = cv::Rect(roi.x+dp, roi.y+dp, roi.width-2*dp, roi.height-2*dp);
+        cv::Rect roi_big = cv::Rect(roi.x-dp, roi.y-dp, roi.width+2*dp, roi.height+2*dp);
 
-        M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 + dperc);
-        cv::warpAffine(image_projection, warps_p[z], M, image_projection.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::resize(image_projection(roi), warps_p[z](roi_big), roi_big.size(), 0, 0, cv::INTER_NEAREST);
+        cv::resize(image_projection(roi), warps_n[z](roi_small), roi_small.size(), 0, 0, cv::INTER_NEAREST);
+        
+        // M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 - dperc);
+        // cv::warpAffine(image_projection, warps_n[z], M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        // M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 + dperc);
+        // cv::warpAffine(image_projection, warps_p[z], M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         //how to update the state
         //du = -(u-cx)/d * dz -> dz = du * d / -(c-cx) -> dz = dpix * d / dm
@@ -229,8 +235,59 @@ public:
         states_p[z][z] += dp * d / dm;
         states_n[z][z] -= dp * d / dm;
 
-        scores_p[z] = similarity_score(obs, warps_p[z]);
-        scores_n[z] = similarity_score(obs, warps_n[z]);
+        scores_p[z] = similarity_score(obs, warps_p[z](roi));
+        scores_n[z] = similarity_score(obs, warps_n[z](roi));
+    }
+
+    void compare_to_warp_c(const cv::Mat &obs, int dp) 
+    {
+
+        //angle to rotate by 
+        double theta = atan2(dp, std::max(roi.width, roi.height)*0.5);
+
+        //three point formula//three point formula
+        //du = -(v-cy)fx/fy * dc
+        //dv = (u-cx)fy/fx * dc
+        static std::array<cv::Point2f, 3> src;
+        src[0] = cv::Point2f(0, 0);
+        src[1] = cv::Point2f(roi.width, 0);
+        src[2] = cv::Point2f(0, roi.height);
+
+        cv::Point cen(roi.width*0.5, roi.height*0.5);
+
+        //this can be optimised as delta_p should be negative of dst_n, dst_p
+        static std::array<cv::Point2f, 3> dst_n, dst_p;
+        for(int i = 0; i < dst_n.size(); i++) 
+        {
+            dst_n[i] = cv::Point2f(-(src[i].y-cen.y)*cp[fx]/cp[fy]*theta, 
+                                  (src[i].x-cen.x)*cp[fy]/cp[fx]*theta) 
+                                  + src[i];
+            dst_p[i] = cv::Point2f(-(src[i].y-cen.y)*cp[fx]/cp[fy]*-theta, 
+                                  (src[i].x-cen.x)*cp[fy]/cp[fx]*-theta) 
+                                  + src[i];
+        }
+
+        static cv::Mat M;
+
+        M = cv::getAffineTransform(src, dst_p);
+        cv::warpAffine(image_projection(roi), warps_p[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        M = cv::getAffineTransform(src, dst_n);
+        cv::warpAffine(image_projection(roi), warps_n[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        // calculate the state change given interactive matrix
+        // dx = du * d / fx
+        // yInfo() << (8 * d /cp[fx]) *0.001;
+        //dc = -(v-cy)fx/fy/du;
+        //but we need to conert to quarternion.
+        perform_rotation(states_p[c], 0, theta);
+        perform_rotation(states_n[c], 0, -theta);
+        //states_p[y][y] -= (dp * d / cp[fy]);
+        //states_n[y][y] += (dp * d / cp[fy]);
+
+        // state[0] += 1 * d / cp[fx];
+        scores_p[c] = similarity_score(obs, warps_p[c](roi));
+        scores_n[c] = similarity_score(obs, warps_n[c](roi));
     }
 
 
@@ -276,51 +333,112 @@ public:
 
         if (!image_projection.empty()) {
             col = 1; row = 1;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            image_projection.copyTo(roi);
-            score_overlay(score_projection, roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            image_projection.copyTo(tile);
+            score_overlay(score_projection, tile);
         }
 
         if(!warps_n[x].empty()) {
             col = 0; row = 1;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            warps_n[x].copyTo(roi);
-            score_overlay(scores_n[x], roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[x].copyTo(tile);
+            score_overlay(scores_n[x], tile);
         }
 
         if(!warps_p[x].empty()) {
             col = 2; row = 1;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            warps_p[x].copyTo(roi);
-            score_overlay(scores_p[x], roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[x].copyTo(tile);
+            score_overlay(scores_p[x], tile);
         }
 
         if(!warps_n[y].empty()) {
             col = 1; row = 0;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            warps_n[y].copyTo(roi);
-            score_overlay(scores_n[y], roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[y].copyTo(tile);
+            score_overlay(scores_n[y], tile);
         }
 
         if(!warps_p[y].empty()) {
             col = 1; row = 2;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            warps_p[y].copyTo(roi);
-            score_overlay(scores_p[y], roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[y].copyTo(tile);
+            score_overlay(scores_p[y], tile);
         }
 
         if(!warps_n[z].empty()) {
             col = 0; row = 0;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            warps_n[z].copyTo(roi);
-            score_overlay(scores_n[z], roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[z].copyTo(tile);
+            score_overlay(scores_n[z], tile);
         }
 
         if(!warps_p[z].empty()) {
             col = 2; row = 2;
-            cv::Mat roi = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
-            warps_p[z].copyTo(roi);
-            score_overlay(scores_p[z], roi);
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[z].copyTo(tile);
+            score_overlay(scores_p[z], tile);
+        }
+        cv::resize(joined, joined_scaled, joined_scaled.size());
+
+        return joined_scaled;
+
+    }
+
+    cv::Mat create_rotation_visualisation() 
+    {
+        static cv::Mat joined = cv::Mat::zeros(cp[h]*3, cp[w]*3, CV_32F);
+        static cv::Mat joined_scaled = cv::Mat::zeros(cp[h], cp[w], CV_32F);
+
+        int col = 0; int row = 0;
+
+        if (!image_projection.empty()) {
+            col = 1; row = 1;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            image_projection.copyTo(tile);
+            score_overlay(score_projection, tile);
+        }
+
+        if(!warps_n[a].empty()) {
+            col = 0; row = 1;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[a].copyTo(tile);
+            score_overlay(scores_n[a], tile);
+        }
+
+        if(!warps_p[a].empty()) {
+            col = 2; row = 1;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[a].copyTo(tile);
+            score_overlay(scores_p[a], tile);
+        }
+
+        if(!warps_n[b].empty()) {
+            col = 1; row = 0;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[b].copyTo(tile);
+            score_overlay(scores_n[b], tile);
+        }
+
+        if(!warps_p[b].empty()) {
+            col = 1; row = 2;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[b].copyTo(tile);
+            score_overlay(scores_p[b], tile);
+        }
+
+        if(!warps_n[c].empty()) {
+            col = 0; row = 0;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_n[c].copyTo(tile);
+            score_overlay(scores_n[c], tile);
+        }
+
+        if(!warps_p[c].empty()) {
+            col = 2; row = 2;
+            cv::Mat tile = joined(cv::Rect(cp[w] * col, cp[h] * row, cp[w], cp[h]));
+            warps_p[c].copyTo(tile);
+            score_overlay(scores_p[c], tile);
         }
         cv::resize(joined, joined_scaled, joined_scaled.size());
 
