@@ -149,7 +149,7 @@ public:
     void main_loop()
     {
         int dp = 2;
-        int blur = 20;
+        int blur = 10;
         while (!isStopping()) {
 
             double tic = Time::now();
@@ -176,8 +176,11 @@ public:
             warp_handler.reset_comparison(eros_f);
             warp_handler.compare_to_warp_x(eros_f, dp);
             warp_handler.compare_to_warp_y(eros_f, dp);
-            //warp_handler.compare_to_warp_z(eros_f, dp);
+            warp_handler.compare_to_warp_z(eros_f, dp);
+            //warp_handler.compare_to_warp_a(eros_f, dp);
+            //warp_handler.compare_to_warp_b(eros_f, dp);
             warp_handler.compare_to_warp_c(eros_f, dp);
+            
             if(step) {
                 state = warp_handler.next_best();
                 step = true;

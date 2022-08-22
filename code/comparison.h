@@ -201,40 +201,86 @@ public:
         scores_n[y] = similarity_score(obs, warps_n[y](roi));
     }
 
-    void compare_to_warp_z(const cv::Mat &obs, int dp)  
+    // void compare_to_warp_z(const cv::Mat &obs, int dp)  
+    // {
+    //     //how to get the distance? DM = max(object distance from centre)
+    //     // lets move m pixel -> D% = 1 - m / DM
+    //     // lets move m pixel -> d% = 1 + m / DM
+    //     static cv::Mat M;
+    //     //cv::Rect roi = cv::boundingRect(image_projection);
+    //     double dmx = std::max(fabs(roi.x - cp[cx]), fabs(roi.x + roi.width - cp[cx]));
+    //     double dmy = std::max(fabs(roi.y - cp[cy]), fabs(roi.y + roi.height - cp[cy]));
+    //     //  double dm = sqrt(dmx*dmx + dmy*dmy);
+        
+    //     //double dm = (cp[w] * 0.5);
+    //     double dm = std::max(dmx, dmy);
+    //     //double dperc = dp / dm; 
+
+    //     //yInfo() << dmx << 1-dperc << 1+dperc;
+    //     cv::Rect roi_small = cv::Rect(roi.x+dp, roi.y+dp, roi.width-2*dp, roi.height-2*dp);
+    //     cv::Rect roi_big = cv::Rect(roi.x-dp, roi.y-dp, roi.width+2*dp, roi.height+2*dp);
+
+    //     cv::resize(image_projection(roi), warps_p[z](roi_big), roi_big.size(), 0, 0, cv::INTER_NEAREST);
+    //     cv::resize(image_projection(roi), warps_n[z](roi_small), roi_small.size(), 0, 0, cv::INTER_NEAREST);
+        
+    //     // M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 - dperc);
+    //     // cv::warpAffine(image_projection, warps_n[z], M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+    //     // M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 + dperc);
+    //     // cv::warpAffine(image_projection, warps_p[z], M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+    //     //how to update the state
+    //     //du = -(u-cx)/d * dz -> dz = du * d / -(c-cx) -> dz = dpix * d / dm
+    //     //dv = -(v-cy)/d * dz
+    //     states_p[z][z] += dp * d / dm;
+    //     states_n[z][z] -= dp * d / dm;
+
+    //     scores_p[z] = similarity_score(obs, warps_p[z](roi));
+    //     scores_n[z] = similarity_score(obs, warps_n[z](roi));
+    // }
+
+    void compare_to_warp_z(const cv::Mat &obs, int dp) 
     {
-        //how to get the distance? DM = max(object distance from centre)
-        // lets move m pixel -> D% = 1 - m / DM
-        // lets move m pixel -> d% = 1 + m / DM
+        dp *= 2;
+        double d2c = roi.width > roi.height ? roi.width*0.5 : roi.height*0.5;
+        double dz = dp * d / d2c;
+        //[du dv] =
+        //[ -(u-cx)/d,
+        //  -(v-cy)/d, ] * dz
+
+        //three point formula//three point formula
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = roi.width;
+        src[2].y = roi.height;
+
+        cv::Point cen(roi.width*0.5, roi.height*0.5);
+
+        //three point formula//three point formula
+        static std::array<cv::Point2f, 3> dst_n, dst_p;
+        for(int i = 0; i < dst_n.size(); i++) 
+        {
+            double du = -(src[i].x-cen.x)/d;
+            double dv = -(src[i].y-cen.y)/d;
+            dst_n[i] = cv::Point2f(du * dz, dv * dz);
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
+        }
         static cv::Mat M;
-        //cv::Rect roi = cv::boundingRect(image_projection);
-        double dmx = std::max(fabs(roi.x - cp[cx]), fabs(roi.x + roi.width - cp[cx]));
-        double dmy = std::max(fabs(roi.y - cp[cy]), fabs(roi.y + roi.height - cp[cy]));
-        //  double dm = sqrt(dmx*dmx + dmy*dmy);
+
+        M = cv::getAffineTransform(src, dst_p);
+        cv::warpAffine(image_projection(roi), warps_p[z](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        //image_projection(roi).copyTo(warps_p[b](roi));
+
+        M = cv::getAffineTransform(src, dst_n);
+        cv::warpAffine(image_projection(roi), warps_n[z](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        //image_projection(roi).copyTo(warps_n[b](roi));
+
+        // calculate the state change given interactive matrix
+        states_p[z][z] += dz;
+        states_n[z][z] -= dz;
+        //perform_rotation(states_p[z], 2, -theta);
+        //perform_rotation(states_n[a], 2, theta);
         
-        //double dm = (cp[w] * 0.5);
-        double dm = std::max(dmx, dmy);
-        //double dperc = dp / dm; 
-
-        //yInfo() << dmx << 1-dperc << 1+dperc;
-        cv::Rect roi_small = cv::Rect(roi.x+dp, roi.y+dp, roi.width-2*dp, roi.height-2*dp);
-        cv::Rect roi_big = cv::Rect(roi.x-dp, roi.y-dp, roi.width+2*dp, roi.height+2*dp);
-
-        cv::resize(image_projection(roi), warps_p[z](roi_big), roi_big.size(), 0, 0, cv::INTER_NEAREST);
-        cv::resize(image_projection(roi), warps_n[z](roi_small), roi_small.size(), 0, 0, cv::INTER_NEAREST);
-        
-        // M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 - dperc);
-        // cv::warpAffine(image_projection, warps_n[z], M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-
-        // M = cv::getRotationMatrix2D(cv::Point(cp[cx], cp[cy]), 0, 1 + dperc);
-        // cv::warpAffine(image_projection, warps_p[z], M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-
-        //how to update the state
-        //du = -(u-cx)/d * dz -> dz = du * d / -(c-cx) -> dz = dpix * d / dm
-        //dv = -(v-cy)/d * dz
-        states_p[z][z] += dp * d / dm;
-        states_n[z][z] -= dp * d / dm;
-
         scores_p[z] = similarity_score(obs, warps_p[z](roi));
         scores_n[z] = similarity_score(obs, warps_n[z](roi));
     }
@@ -249,11 +295,10 @@ public:
         //three point formula//three point formula
         //du = -(v-cy)fx/fy * dc
         //dv = (u-cx)fy/fx * dc
-        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
-        src[1].x = roi.width;
-        src[2].y = roi.height;
-
         cv::Point cen(roi.width*0.5, roi.height*0.5);
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = roi.width; src[1].y = roi.height*0.25;
+        src[2].x = roi.width*0.25; src[2].y = roi.height;
 
         static std::array<cv::Point2f, 3> dst_n, dst_p;
         for(int i = 0; i < dst_n.size(); i++) 
@@ -282,41 +327,85 @@ public:
     void compare_to_warp_b(const cv::Mat &obs, int dp) 
     {
         //yaw
+        //du = ((fx*fx)+(u-cx)(u-cx))/fx * db
+        //dv = (u-cx)(v-cy)/fx * db
 
-        //angle to rotate by 
-        double theta = atan2(dp, std::max(roi.width, roi.height)*0.5);
-
-        //three point formula//three point formula
-        //du = -(v-cy)fx/fy * dc
-        //dv = (u-cx)fy/fx * dc
-        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
-        src[1].x = roi.width;
-        src[2].y = roi.height;
+        //db = (fx*fx+(u-cx)(u-cx)/fx) / du;
+        double theta = (cp[fx] * dp) / ((cp[fx]*cp[fx]) + (roi.width*roi.width*0.25));
 
         cv::Point cen(roi.width*0.5, roi.height*0.5);
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = roi.width; src[1].y = roi.height*0.25;
+        src[2].x = roi.width*0.25; src[2].y = roi.height;
 
+        //three point formula//three point formula
         static std::array<cv::Point2f, 3> dst_n, dst_p;
         for(int i = 0; i < dst_n.size(); i++) 
         {
-            dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cp[fx] / cp[fy] * theta,
-                                   (src[i].x - cen.x) * cp[fy] / cp[fx] * theta);
+            double du = (cp[fx]*cp[fx] + (src[i].x-cen.x)*(src[i].x-cen.x))/cp[fx];
+            double dv = ((src[i].x-cen.x)*(src[i].y-cen.y))/cp[fx];
+            dst_n[i] = cv::Point2f(du * theta, dv * theta);
             dst_p[i] = src[i] - dst_n[i];
             dst_n[i] = src[i] + dst_n[i];
         }
         static cv::Mat M;
 
         M = cv::getAffineTransform(src, dst_p);
-        cv::warpAffine(image_projection(roi), warps_p[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(image_projection(roi), warps_p[b](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        //image_projection(roi).copyTo(warps_p[b](roi));
 
         M = cv::getAffineTransform(src, dst_n);
-        cv::warpAffine(image_projection(roi), warps_n[c](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(image_projection(roi), warps_n[b](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        //image_projection(roi).copyTo(warps_n[b](roi));
 
         // calculate the state change given interactive matrix
-        perform_rotation(states_p[c], 0, theta);
-        perform_rotation(states_n[c], 0, -theta);
+        perform_rotation(states_p[b], 1, -theta);
+        perform_rotation(states_n[b], 1, theta);
         
-        scores_p[c] = similarity_score(obs, warps_p[c](roi));
-        scores_n[c] = similarity_score(obs, warps_n[c](roi));
+        scores_p[b] = similarity_score(obs, warps_p[b](roi));
+        scores_n[b] = similarity_score(obs, warps_n[b](roi));
+    }
+
+    void compare_to_warp_a(const cv::Mat &obs, int dp) 
+    {
+        //pitch
+    //[du dv] =
+    //[ -(u-cx)(v-cy)/fy, 
+    //  -(fy*fy)-(v-cy)(v-cy)/fy] * da
+
+        double theta = (cp[fy] * dp) / (-(cp[fy]*cp[fy]) - (roi.width*roi.width*0.25));
+
+        cv::Point cen(roi.width*0.5, roi.height*0.5);
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = roi.width; src[1].y = roi.height*0.25;
+        src[2].x = roi.width*0.25; src[2].y = roi.height;
+
+        //three point formula//three point formula
+        static std::array<cv::Point2f, 3> dst_n, dst_p;
+        for(int i = 0; i < dst_n.size(); i++) 
+        {
+            double dv = (-cp[fy]*cp[fy] - (src[i].y-cen.y)*(src[i].y-cen.y))/cp[fy];
+            double du = (-(src[i].x-cen.x)*(src[i].y-cen.y))/cp[fy];
+            dst_n[i] = cv::Point2f(du * theta, dv * theta);
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
+        }
+        static cv::Mat M;
+
+        M = cv::getAffineTransform(src, dst_p);
+        cv::warpAffine(image_projection(roi), warps_p[a](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        //image_projection(roi).copyTo(warps_p[b](roi));
+
+        M = cv::getAffineTransform(src, dst_n);
+        cv::warpAffine(image_projection(roi), warps_n[a](roi), M, roi.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        //image_projection(roi).copyTo(warps_n[b](roi));
+
+        // calculate the state change given interactive matrix
+        perform_rotation(states_p[a], 2, -theta);
+        perform_rotation(states_n[a], 2, theta);
+        
+        scores_p[a] = similarity_score(obs, warps_p[a](roi));
+        scores_n[a] = similarity_score(obs, warps_n[a](roi));
     }
 
 
