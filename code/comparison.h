@@ -58,7 +58,7 @@ double similarity_score(const cv::Mat& observation, const cv::Mat& expectation)
 
 class predictions {
 
-private:
+public:
 
     double dp{2};
     double blur{10};
@@ -106,9 +106,54 @@ public:
         proc_roi = cv::Rect(0, 0, proc_size.width, proc_size.height); //this gets updated with every projection
     }
 
+    void create_Ms(double dp)
+    {
+        this->dp = dp;
+        static std::array<cv::Point2f, 3> dst_n, dst_p;
+        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
+        src[1].x = proc_size.width; src[1].y = proc_size.height*0.25;
+        src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
+
+        cv::Point cen = cv::Point(proc_size.width * 0.5, proc_size.height*0.5);
+
+        //x is easy
+        M_p[x] = (cv::Mat_<double>(2, 3) << 1, 0, dp, 0, 1, 0);
+        M_n[x] = (cv::Mat_<double>(2, 3) << 1, 0, -dp, 0, 1, 1);
+
+        //y is easy
+        M_p[y] = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, dp);
+        M_n[y] = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, -dp);
+
+        //z we use the 3 point formula
+        M_p[z] = cv::getRotationMatrix2D(cen, 0, 1+dp/(proc_size.width));
+        M_n[z] = cv::getRotationMatrix2D(cen, 0, 1-dp/(proc_size.width));
+        // for(int i = 0; i < dst_n.size(); i++) 
+        // {
+        //     double du = -(src[i].x-cen.x) * dp / cen.x;
+        //     double dv = -(src[i].y-cen.y) * dp / cen.y;
+        //     dst_n[i] = cv::Point2f(du, dv);
+        //     dst_p[i] = src[i] - dst_n[i];
+        //     dst_n[i] = src[i] + dst_n[i];
+        // }
+        // M_p[z] = cv::getAffineTransform(src, dst_p);
+        // M_n[z] = cv::getAffineTransform(src, dst_n);
+
+        //roll we use the 3 point formula
+        double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5); 
+        for(int i = 0; i < dst_n.size(); i++) 
+        {
+            dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cp[fx] / cp[fy] * theta,
+                                   (src[i].x - cen.x) * cp[fy] / cp[fx] * theta);
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
+        }
+        M_p[c] = cv::getAffineTransform(src, dst_p);
+        M_n[c] = cv::getAffineTransform(src, dst_n);
+    }
+
     void extract_rois(const cv::Mat &projected)
     {
-        int buffer = blur;
+        int buffer = 20;
         static cv::Rect full_roi = cv::Rect(cv::Point(0, 0), projected.size());
         
         //convert to grey
@@ -141,12 +186,11 @@ public:
         }
     }
 
-
     void set_current(const std::array<double, 7> &state)
     {
         state_current = state;
-        //d = state[2];
-        d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
+        d = fabs(state[2]);
+        //d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
     }
 
     void set_projection(const std::array<double, 7> &state, const cv::Mat &image)
@@ -175,49 +219,6 @@ public:
             s = state_current;
 
         score_projection = similarity_score(proc_obs, proc_proj);
-    }
-
-    void create_Ms(int dp)
-    {
-        this->dp = dp;
-        static std::array<cv::Point2f, 3> dst_n, dst_p;
-        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
-        src[1].x = proc_size.width; src[1].y = proc_size.height*0.25;
-        src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
-
-        cv::Point cen = cv::Point(proc_size.width * 0.5, proc_size.height*0.5);
-
-        //x is easy
-        M_p[x] = (cv::Mat_<double>(2, 3) << 1, 0, dp, 0, 1, 0);
-        M_n[x] = (cv::Mat_<double>(2, 3) << 1, 0, -dp, 0, 1, 1);
-
-        //y is easy
-        M_p[y] = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, dp);
-        M_n[y] = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, -dp);
-
-        //z we use the 3 point formula
-        for(int i = 0; i < dst_n.size(); i++) 
-        {
-            double du = -(src[i].x-cen.x) * dp * 2 / cen.x;
-            double dv = -(src[i].y-cen.y) * dp * 2 / cen.y;
-            dst_n[i] = cv::Point2f(du, dv);
-            dst_p[i] = src[i] - dst_n[i];
-            dst_n[i] = src[i] + dst_n[i];
-        }
-        M_p[z] = cv::getAffineTransform(src, dst_p);
-        M_n[z] = cv::getAffineTransform(src, dst_n);
-
-        //roll we use the 3 point formula
-        double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5); 
-        for(int i = 0; i < dst_n.size(); i++) 
-        {
-            dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cp[fx] / cp[fy] * theta,
-                                   (src[i].x - cen.x) * cp[fy] / cp[fx] * theta);
-            dst_p[i] = src[i] - dst_n[i];
-            dst_n[i] = src[i] + dst_n[i];
-        }
-        M_p[c] = cv::getAffineTransform(src, dst_p);
-        M_n[c] = cv::getAffineTransform(src, dst_n);
     }
 
     void compare_to_warp_x() 
@@ -255,16 +256,20 @@ public:
     void compare_to_warp_z() 
     {
         cv::warpAffine(proc_proj, warps_p[z], M_p[z], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        // cv::Rect small(dp, dp, proc_size.width-2*dp, proc_size.width-2*dp);
+        // cv::resize(proc_proj(small), warps_p[z], warps_p[z].size(), 0, 0, cv::INTER_CUBIC);
         //image_projection(roi).copyTo(warps_p[b](roi));
 
         cv::warpAffine(proc_proj, warps_n[z], M_n[z], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        // cv::resize(proc_proj, warps_p[z](small), small.size(), 0, 0, cv::INTER_CUBIC);
         //image_projection(roi).copyTo(warps_n[b](roi));
 
         // calculate the state change given interactive matrix
-        states_p[z][z] += scale * dp * 2 * d / (proc_size.width*0.5);
-        states_n[z][z] -= scale * dp * 2 * d / (proc_size.width*0.5);
+        states_p[z][z] += d * dp / (proc_size.width);
+        states_n[z][z] -= d * dp / (proc_size.width);
         //perform_rotation(states_p[z], 2, -theta);
         //perform_rotation(states_n[a], 2, theta);
+        // yInfo() << cv::sum(cv::sum(proc_proj))[0] << " " << cv::sum(cv::sum(warps_p[z]))[0];
         
         scores_p[z] = similarity_score(proc_obs, warps_p[z]);
         scores_n[z] = similarity_score(proc_obs, warps_n[z]);

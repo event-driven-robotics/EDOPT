@@ -74,9 +74,9 @@ public:
             return false;
         }
 
-        int blur = 4;
-        warp_handler.initialise(intrinsics, cv::Size(80, 80), blur);
-        int dp = 2;
+        int blur = 5;
+        warp_handler.initialise(intrinsics, cv::Size(100, 100), blur);
+        double dp = 1;
         warp_handler.create_Ms(dp);
 
         img_size = eros_handler.res;
@@ -104,19 +104,6 @@ public:
         return true;
     }
 
-    void set_roi(cv::Mat projected, int buffer)
-    {
-        static cv::Mat grey;
-        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
-        roi = cv::boundingRect(grey);
-        roi.x -= buffer; roi.y-= buffer;
-        roi.width += buffer*2; roi.height += buffer*2;
-        //limit the roi to the image space.        
-        roi = roi & cv::Rect(cv::Point(0, 0), img_size);
-        proc_scale.height = (double)roi.height / (double)img_size.height;
-        proc_scale.width = (double)roi.width / (double)img_size.width;
-    }
-
     double getPeriod() override
     {
         return 0.1;
@@ -142,10 +129,20 @@ public:
             stopModule();
             return false;
         }
-        yInfo() << (int)toc_eros << "\t" 
-                << (int)toc_proj << "\t"
-                << (int)toc_projproc << "\t"
-                << (int)toc_warp;
+
+        std::array<double, 6> s = warp_handler.scores_p;
+        yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
+        s = warp_handler.scores_n;
+        yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
+        yInfo();
+
+        // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
+        //         << state[5] << state[6];
+
+        // yInfo() << (int)toc_eros << "\t" 
+        //         << (int)toc_proj << "\t"
+        //         << (int)toc_projproc << "\t"
+        //         << (int)toc_warp;
         return true;
     }
 
@@ -168,26 +165,28 @@ public:
             double toc_proj = Time::now();
 
             //proj_f = process_projected(projected_image(roi), proc_size, blur);
+            warp_handler.set_current(state);            
             warp_handler.set_projection(state, projected_image);
             double toc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
             //eros_f = process_eros(eros_u(roi), proc_size);
+            
             warp_handler.set_observation(eros_u);
             double toc_eros = Time::now();
             
             //warp_handler.set_projection(state, proj_f, roi);
             //warp_handler.reset_comparison(eros_f);
             warp_handler.compare_to_warp_x();
-            //warp_handler.compare_to_warp_y();
-            //warp_handler.compare_to_warp_z();
+            warp_handler.compare_to_warp_y();
+            warp_handler.compare_to_warp_z();
             //warp_handler.compare_to_warp_a(eros_f);
             //warp_handler.compare_to_warp_b(eros_f, dp);
-            //warp_handler.compare_to_warp_c();
+            warp_handler.compare_to_warp_c();
             
             if(step) {
                 state = warp_handler.next_best();
-                warp_handler.set_current(state);
+                
                 step = true;
             }
             double toc_warp = Time::now();
