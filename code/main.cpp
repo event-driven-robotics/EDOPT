@@ -29,11 +29,16 @@ private:
 
     std::array<double, 7> default_state = {0, 0, -300, 0.0, -1.0, 0.0, 0};
     std::array<double, 7> state;
+    std::deque< std::array<double, 8> > data_to_save;
+
     SICAD* si_cad;
 
     cv::Mat eros_u, eros_f, proj_f;
     double tic, toc_eros, toc_proj, toc_projproc, toc_warp;
     bool step{false};
+
+    std::ofstream fs;
+    std::string file_name;
 
 public:
 
@@ -97,6 +102,13 @@ public:
         cv::namedWindow("Rotations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Rotations", img_size);
         cv::moveWindow("Rotations", 2600, 540);
+
+        fs.open(file_name);
+        if (!fs.is_open())
+        {
+            yError()<<"Could not open file to save the target object pose";
+            return -1;
+        }
 
         return true;
     }
@@ -191,6 +203,9 @@ public:
             this->toc_proj= ((toc_proj - tic) * 10e3);
             this->toc_projproc = ((toc_projproc - toc_proj) * 10e3);
             this->toc_warp= ((toc_warp - toc_eros) * 10e3);
+
+	    if (fs.is_open())
+            	data_to_save.push_back({yarp::os::Time::now()-toc_warp, state[0], state[1], state[2], state[3], state[4], state[5], state[6]});
         }
     }
 
@@ -200,6 +215,14 @@ public:
     bool close() override
     {
         worker.join();
+        if(fs.is_open())
+        {
+            yInfo() << "Writing data";
+            for(auto i : data_to_save)
+                fs << i[0] << ", " << i[1] << ", " << i[2] << ", " << i[3] << ", " << i[4] << ", " << i[5] << ", " << i[6] << ", " << i[7] << std::endl;
+            fs.close();
+            yInfo() << "Finished Writing data";
+        }
         return true;
     }
 
