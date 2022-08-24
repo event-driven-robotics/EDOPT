@@ -74,7 +74,10 @@ public:
             return false;
         }
 
-        warp_handler.set_intrinsics(intrinsics);
+        int blur = 4;
+        warp_handler.initialise(intrinsics, cv::Size(80, 80), blur);
+        int dp = 2;
+        warp_handler.create_Ms(dp);
 
         img_size = eros_handler.res;
         roi = cv::Rect(cv::Point(0, 0), img_size);
@@ -122,7 +125,7 @@ public:
     bool updateModule() override
     {
         static cv::Mat vis;
-        vis = make_visualisation(eros_u, proj_f, roi);
+        vis = warp_handler.make_visualisation(eros_u);
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
@@ -148,8 +151,7 @@ public:
 
     void main_loop()
     {
-        int dp = 2;
-        int blur = 10;
+        
         while (!isStopping()) {
 
             double tic = Time::now();
@@ -161,28 +163,31 @@ public:
                 return;
 
             }
-            set_roi(projected_image, blur+dp);
+
+            warp_handler.extract_rois(projected_image);
             double toc_proj = Time::now();
 
-            proj_f = process_projected(projected_image(roi), proc_size, blur);
+            //proj_f = process_projected(projected_image(roi), proc_size, blur);
+            warp_handler.set_projection(state, projected_image);
             double toc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
-            eros_f = process_eros(eros_u(roi), proc_size);
+            //eros_f = process_eros(eros_u(roi), proc_size);
+            warp_handler.set_observation(eros_u);
             double toc_eros = Time::now();
             
-            warp_handler.set_current(state);
-            warp_handler.set_projection(state, proj_f, roi);
-            warp_handler.reset_comparison(eros_f);
-            warp_handler.compare_to_warp_x(eros_f, dp);
-            warp_handler.compare_to_warp_y(eros_f, dp);
-            warp_handler.compare_to_warp_z(eros_f, dp);
-            //warp_handler.compare_to_warp_a(eros_f, dp);
+            //warp_handler.set_projection(state, proj_f, roi);
+            //warp_handler.reset_comparison(eros_f);
+            warp_handler.compare_to_warp_x();
+            //warp_handler.compare_to_warp_y();
+            //warp_handler.compare_to_warp_z();
+            //warp_handler.compare_to_warp_a(eros_f);
             //warp_handler.compare_to_warp_b(eros_f, dp);
-            warp_handler.compare_to_warp_c(eros_f, dp);
+            //warp_handler.compare_to_warp_c();
             
             if(step) {
                 state = warp_handler.next_best();
+                warp_handler.set_current(state);
                 step = true;
             }
             double toc_warp = Time::now();
