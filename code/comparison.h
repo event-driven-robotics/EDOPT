@@ -161,36 +161,40 @@ public:
         warps[cn].M = cv::getAffineTransform(src, dst_n);
 
         theta = atan2(dp, proc_size.width * 0.5);
-        warps[bp].rmx = cv::Mat::zeros(proc_size, CV_32F);
-        warps[bp].rmy = cv::Mat::zeros(proc_size, CV_32F);
-        warps[bn].rmx = cv::Mat::zeros(proc_size, CV_32F);
-        warps[bn].rmy = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat bp_rmx = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat bp_rmy = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat bn_rmx = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat bn_rmy = cv::Mat::zeros(proc_size, CV_32F);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
-                warps[bp].rmx.at<float>(y, x) = x + dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
-                warps[bn].rmx.at<float>(y, x) = x - dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
-                warps[bp].rmy.at<float>(y, x) = y;
-                warps[bn].rmy.at<float>(y, x) = y;
+                bp_rmx.at<float>(y, x) = x + dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
+                bn_rmx.at<float>(y, x) = x - dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
+                bp_rmy.at<float>(y, x) = y;
+                bn_rmy.at<float>(y, x) = y;
             }
         }
+        cv::convertMaps(bp_rmx, bp_rmy, warps[bp].rmx, warps[bp].rmy, CV_16SC2);
+        cv::convertMaps(bn_rmx, bn_rmy, warps[bn].rmx, warps[bn].rmy, CV_16SC2);
         warps[bp].axis = b;
         warps[bp].delta = -theta;
         warps[bn].delta = theta;
         warps[bn].axis = b;
 
         theta = atan2(dp, proc_size.height * 0.5);
-        warps[ap].rmx = cv::Mat::zeros(proc_size, CV_32F);
-        warps[ap].rmy = cv::Mat::zeros(proc_size, CV_32F);
-        warps[an].rmx = cv::Mat::zeros(proc_size, CV_32F);
-        warps[an].rmy = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat ap_rmx = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat ap_rmy = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat an_rmx = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat an_rmy = cv::Mat::zeros(proc_size, CV_32F);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
-                warps[ap].rmx.at<float>(y, x) = x;
-                warps[an].rmx.at<float>(y, x) = x;
-                warps[ap].rmy.at<float>(y, x) = y + dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
-                warps[an].rmy.at<float>(y, x) = y - dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
+                ap_rmx.at<float>(y, x) = x;
+                an_rmx.at<float>(y, x) = x;
+                ap_rmy.at<float>(y, x) = y + dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
+                an_rmy.at<float>(y, x) = y - dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
             }
         }
+        cv::convertMaps(ap_rmx, ap_rmy, warps[ap].rmx, warps[ap].rmy, CV_16SC2);
+        cv::convertMaps(an_rmx, an_rmy, warps[an].rmx, warps[an].rmy, CV_16SC2);
         warps[ap].axis = a;
         warps[ap].delta = -theta;
         warps[an].delta = theta;
