@@ -122,7 +122,7 @@ public:
         cv::imshow("Rotations", warps_r+0.5);
         int c = cv::waitKey(1);
         if (c == 32)
-            state = default_state;
+            warp_handler.set_current(default_state);
         if (c == 'g')
             step = true;
         if(c == 27) {
@@ -130,8 +130,8 @@ public:
             return false;
         }
 
-        yInfo() << cv::sum(cv::sum(warp_handler.warps_p[predictions::z]))[0]
-                << cv::sum(cv::sum(warp_handler.proc_proj))[0];
+        // yInfo() << cv::sum(cv::sum(warp_handler.warps[predictions::z].img_warp))[0]
+        //         << cv::sum(cv::sum(warp_handler.projection.img_warp))[0];
 
         // std::array<double, 6> s = warp_handler.scores_p;
         // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
@@ -151,7 +151,7 @@ public:
 
     void main_loop()
     {
-        
+        warp_handler.set_current(state);
         while (!isStopping()) {
 
             double tic = Time::now();
@@ -166,14 +166,11 @@ public:
 
             warp_handler.extract_rois(projected_image);
             double toc_proj = Time::now();
-
-            //proj_f = process_projected(projected_image(roi), proc_size, blur);
-            warp_handler.set_current(state);            
+                        
             warp_handler.set_projection(state, projected_image);
             double toc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
-            //eros_f = process_eros(eros_u(roi), proc_size);
             
             warp_handler.set_observation(eros_u);
             double toc_eros = Time::now();
@@ -188,8 +185,8 @@ public:
             warp_handler.compare_to_warp_c();
             
             if(step) {
-                state = warp_handler.next_best();
-                
+                warp_handler.update_from_max();
+                state = warp_handler.state_current;
                 step = true;
             }
             double toc_warp = Time::now();
