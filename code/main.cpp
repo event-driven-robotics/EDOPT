@@ -73,14 +73,15 @@ public:
             return false;
         }
 
-        int blur = 10;
-        warp_handler.initialise(intrinsics, cv::Size(120, 120), blur);
-        double dp = 2;
-        warp_handler.create_Ms(dp);
+        int rescale_size = 180;
+        int blur = rescale_size / 20;
+        double dp =  1+rescale_size / 100;
+        warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
+        warp_handler.create_Ms(10);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", img_size);
-        cv::moveWindow("EROS", 1920, 0);
+        cv::moveWindow("EROS", 0, 0);
 
         eros_u = cv::Mat::zeros(img_size, CV_8U);
         eros_f = cv::Mat::zeros(img_size, CV_32F);
@@ -90,11 +91,11 @@ public:
 
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
-        cv::moveWindow("Translations", 1920, 540);
+        cv::moveWindow("Translations", 0, 540);
 
         cv::namedWindow("Rotations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Rotations", img_size);
-        cv::moveWindow("Rotations", 2600, 540);
+        cv::moveWindow("Rotations", 700, 540);
 
         return true;
     }
@@ -170,13 +171,11 @@ public:
             warp_handler.set_observation(eros_u);
             double toc_eros = Time::now();
             
-            //warp_handler.set_projection(state, proj_f, roi);
-            //warp_handler.reset_comparison(eros_f);
             warp_handler.compare_to_warp_x();
             warp_handler.compare_to_warp_y();
             warp_handler.compare_to_warp_z();
-            //warp_handler.compare_to_warp_a(eros_f);
-            //warp_handler.compare_to_warp_b(eros_f, dp);
+            warp_handler.compare_to_warp_a();
+            warp_handler.compare_to_warp_b();
             warp_handler.compare_to_warp_c();
             
             if(step) {

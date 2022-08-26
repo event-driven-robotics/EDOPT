@@ -73,9 +73,9 @@ public:
 
     cv::Mat process_eros(cv::Mat eros_img) {
         static cv::Mat eros_blurred, eros_f, eros_fn;
-        // cv::GaussianBlur(eros_img, eros_blurred, cv::Size(5, 5), 0);
-        eros_img.convertTo(eros_f, CV_32F, 0.003921569);
-        // cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
+        cv::GaussianBlur(eros_img, eros_blurred, cv::Size(5, 5), 0);
+        eros_blurred.convertTo(eros_f, CV_32F, 0.003921569);
+        //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
 
         return eros_f;
     }
@@ -96,6 +96,7 @@ public:
         proc_size = size_to_process;
         this->blur = blur;
 
+        proc_obs = cv::Mat::zeros(proc_size, CV_32F);
         projection.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         for(auto &warp : warps) {
             warp.img_warp = cv::Mat::zeros(proc_size, CV_32F);
@@ -108,9 +109,10 @@ public:
     void create_Ms(double dp)
     {
         this->dp = dp;
+        double theta = 0;
         static std::array<cv::Point2f, 3> dst_n, dst_p;
         static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
-        src[1].x = proc_size.width; src[1].y = proc_size.height*0.25;
+        src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
         src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
 
         cv::Point cen = cv::Point(proc_size.width * 0.5, proc_size.height*0.5);
@@ -139,7 +141,9 @@ public:
         warps[zn].M = cv::getRotationMatrix2D(cen, 0, 1-dp/(proc_size.width));
         
         //roll we use the 3 point formula
-        double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5); 
+        src[1].x = proc_size.width*0.75; src[1].y = proc_size.height*0.25;
+        src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
+        theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5); 
         for(int i = 0; i < dst_n.size(); i++) 
         {
             dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cam[fx] / cam[fy] * theta,
@@ -154,10 +158,38 @@ public:
         warps[cn].delta = -theta;
         warps[cn].M = cv::getAffineTransform(src, dst_n);
 
-        warps[ap].axis = a;
-        warps[an].axis = a;
+        src[0].x = proc_size.width*0.25; src[0].y = proc_size.height * 0.75;
+        src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
+        src[2].x = proc_size.width*0.75; src[2].y = proc_size.height;
+        theta = atan2(dp, proc_size.width * 0.5);
+        for (int i = 0; i < dst_n.size(); i++) {
+            dst_n[i] = cv::Point2f(dp * cos(2 * M_PI * (src[i].x - cen.x) / (proc_size.width * 0.5)),
+                                   0);
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
+        }
         warps[bp].axis = b;
+        warps[bp].delta = -theta;
+        warps[bp].M = cv::getAffineTransform(src, dst_p);
+        warps[bn].delta = theta;
         warps[bn].axis = b;
+        warps[bn].M = cv::getAffineTransform(src, dst_n);
+
+        src[0].x = proc_size.width*0.25; src[0].y = proc_size.height * 0.75;
+        src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
+        src[2].x = proc_size.width; src[2].y = proc_size.height*0.75;
+        theta = atan2(dp, proc_size.height * 0.5);
+        for (int i = 0; i < dst_n.size(); i++) {
+            dst_n[i] = cv::Point2f(0, dp * cos(2 * M_PI * (src[i].y - cen.y) / (proc_size.height * 0.5)));
+            dst_p[i] = src[i] - dst_n[i];
+            dst_n[i] = src[i] + dst_n[i];
+        }
+        warps[ap].axis = a;
+        warps[ap].delta = theta;
+        warps[ap].M = cv::getAffineTransform(src, dst_p);
+        warps[an].delta = -theta;
+        warps[an].axis = a;
+        warps[an].M = cv::getAffineTransform(src, dst_n);
     }
 
     void extract_rois(const cv::Mat &projected)
@@ -208,18 +240,20 @@ public:
         static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC3);
         roi_rgb = 0;
         //resize could use nearest to speed up?
-        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size());
+        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_NEAREST);
         projection.img_warp = process_projected(roi_rgb, blur);
     }
 
     void set_observation(const cv::Mat &image)
     {
         //image comes in as a 8U and must be converted to 32F
-        static cv::Mat roi_u = cv::Mat::zeros(proc_size, CV_8U);
-        roi_u = 0;
+        //static cv::Mat roi_32f = cv::Mat::zeros(proc_size, CV_32F);
+        //roi_u = 0;
         //resize could use nearest to speed up?
-        cv::resize(image(img_roi), roi_u(proc_roi), proc_roi.size());
-        proc_obs = process_eros(roi_u);
+        proc_obs = 0;
+        cv::Mat roi_32f = process_eros(image(img_roi));
+        cv::resize(roi_32f, proc_obs(proc_roi), proc_roi.size(), 0, 0, cv::INTER_NEAREST);
+        //proc_obs = process_eros(roi_u);
 
         projection.score = similarity_score(proc_obs, projection.img_warp);
     }
@@ -274,12 +308,36 @@ public:
     {
         //roll
         cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
 
         warps[cp].score = similarity_score(proc_obs, warps[cp].img_warp);
         warps[cn].score = similarity_score(proc_obs, warps[cn].img_warp);
+    }
+
+    void compare_to_warp_b() 
+    {
+        //yaw
+        cv::warpAffine(projection.img_warp, warps[bp].img_warp, warps[bp].M,
+            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+        cv::warpAffine(projection.img_warp, warps[bn].img_warp, warps[bn].M,
+            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+
+        warps[bp].score = similarity_score(proc_obs, warps[bp].img_warp);
+        warps[bn].score = similarity_score(proc_obs, warps[bn].img_warp);
+    }
+
+    void compare_to_warp_a() 
+    {
+        //yaw
+        cv::warpAffine(projection.img_warp, warps[ap].img_warp, warps[ap].M,
+            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+        cv::warpAffine(projection.img_warp, warps[an].img_warp, warps[an].M,
+            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+
+        warps[ap].score = similarity_score(proc_obs, warps[ap].img_warp);
+        warps[an].score = similarity_score(proc_obs, warps[an].img_warp);
     }
 
     // void compare_to_warp_b(const cv::Mat &obs, int dp) 
@@ -419,7 +477,7 @@ public:
     {
         static cv::Mat joined = cv::Mat::zeros(cam[h]*3, cam[w]*3, CV_32F);
         static cv::Mat joined_scaled = cv::Mat::zeros(cam[h], cam[w], CV_32F);
-
+        cv::Mat tile;
         int col = 0; int row = 0;
 
         for(auto &warp : warps) {
@@ -439,15 +497,20 @@ public:
                 default:
                     continue;
             }
-            cv::Mat tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
+            tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
             cv::resize(warp.img_warp, tile, tile.size());
             score_overlay(warp.score, tile);
         }
         col = 1;
         row = 1;
-        cv::Mat tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
+        tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
         cv::resize(projection.img_warp, tile, tile.size());
         score_overlay(projection.score, tile);
+
+        col = 0;
+        row = 2;
+        tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
+        cv::resize(proc_obs, tile, tile.size());
 
         cv::resize(joined, joined_scaled, joined_scaled.size());
 
@@ -459,7 +522,7 @@ public:
     {
         static cv::Mat joined = cv::Mat::zeros(cam[h]*3, cam[w]*3, CV_32F);
         static cv::Mat joined_scaled = cv::Mat::zeros(cam[h], cam[w], CV_32F);
-
+        cv::Mat tile;
         int col = 0; int row = 0;
 
         for(auto &warp : warps) {
@@ -479,15 +542,20 @@ public:
                 default:
                     continue;
             }
-            cv::Mat tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
+            tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
             cv::resize(warp.img_warp, tile, tile.size());
             score_overlay(warp.score, tile);
         }
         col = 1;
         row = 1;
-        cv::Mat tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
+        tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
         cv::resize(projection.img_warp, tile, tile.size());
         score_overlay(projection.score, tile);
+
+        col = 0;
+        row = 2;
+        tile = joined(cv::Rect(cam[w] * col, cam[h] * row, cam[w], cam[h]));
+        cv::resize(proc_obs, tile, tile.size());
 
         cv::resize(joined, joined_scaled, joined_scaled.size());
 
