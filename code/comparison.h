@@ -123,7 +123,7 @@ public:
         warps[xp].axis = x;
         warps[xp].M = (cv::Mat_<double>(2, 3) << 1, 0, dp, 0, 1, 0);
         warps[xn].axis = x;
-        warps[xn].M = (cv::Mat_<double>(2, 3) << 1, 0, -dp, 0, 1, 1);
+        warps[xn].M = (cv::Mat_<double>(2, 3) << 1, 0, -dp, 0, 1, 0);
 
         //y is a shift
         warps[yp].axis = y;
@@ -222,14 +222,14 @@ public:
         if(img_roi.width >= img_roi.height) {
             proc_roi.width = proc_size.width;
             proc_roi.x = 0;
-            scale = (double)img_roi.width / proc_roi.width;
+            scale = (double)proc_roi.width / img_roi.width;
             double ratio = (double)img_roi.height / img_roi.width;
             proc_roi.height = proc_size.height * ratio;
             proc_roi.y = (proc_size.height - proc_roi.height) * 0.5;
         } else {
             proc_roi.height = proc_size.height;
             proc_roi.y = 0;
-            scale = (double)img_roi.height / proc_roi.height;
+            scale = (double)proc_roi.height / img_roi.height;
             double ratio = (double)img_roi.width / img_roi.height;
             proc_roi.width = proc_size.width * ratio;
             proc_roi.x = (proc_size.width - proc_roi.width) * 0.5;

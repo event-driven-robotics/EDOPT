@@ -28,7 +28,7 @@ private:
     std::array<double, 7> state;
     SICAD* si_cad;
 
-    cv::Mat eros_u, eros_f, proj_f;
+    cv::Mat proj_rgb, eros_u;
     double tic, toc_eros, toc_proj, toc_projproc, toc_warp;
     bool step{false};
 
@@ -73,9 +73,9 @@ public:
             return false;
         }
 
-        int rescale_size = 180;
-        int blur = rescale_size / 20;
-        double dp =  1+rescale_size / 100;
+        int rescale_size = 120;
+        int blur = rescale_size / 10;
+        double dp =  1;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
         warp_handler.create_Ms(dp);
 
@@ -84,8 +84,8 @@ public:
         cv::moveWindow("EROS", 0, 0);
 
         eros_u = cv::Mat::zeros(img_size, CV_8U);
-        eros_f = cv::Mat::zeros(img_size, CV_32F);
-        proj_f = cv::Mat::zeros(img_size, CV_32F);
+        proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
+
         
         worker = std::thread([this]{main_loop();});
 
@@ -107,8 +107,11 @@ public:
 
     bool updateModule() override
     {
-        static cv::Mat vis;
-        vis = warp_handler.make_visualisation(eros_u);
+        static cv::Mat vis, proj_vis, eros_vis;
+        //vis = warp_handler.make_visualisation(eros_u);
+        proj_rgb.copyTo(proj_vis);
+        cv::cvtColor(eros_u, eros_vis, cv::COLOR_GRAY2BGR);
+        vis = proj_rgb*0.5 + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
@@ -152,18 +155,16 @@ public:
 
             double tic = Time::now();
 
-            static cv::Mat projected_image = cv::Mat::zeros(img_size, CV_8UC3);
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, projected_image)) {
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return;
-
             }
 
-            warp_handler.extract_rois(projected_image);
+            warp_handler.extract_rois(proj_rgb);
             double toc_proj = Time::now();
                         
-            warp_handler.set_projection(state, projected_image);
+            warp_handler.set_projection(state, proj_rgb);
             double toc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
