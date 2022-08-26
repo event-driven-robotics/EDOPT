@@ -77,7 +77,7 @@ public:
         int blur = rescale_size / 20;
         double dp =  1+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
-        warp_handler.create_Ms(10);
+        warp_handler.create_Ms(dp);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", img_size);

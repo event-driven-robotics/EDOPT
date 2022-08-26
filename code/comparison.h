@@ -40,6 +40,8 @@ public:
     typedef struct warp_bundle
     {
         cv::Mat M;
+        cv::Mat rmx;
+        cv::Mat rmy;
         cv::Mat img_warp;
         int axis{0};
         double delta{0.0};
@@ -158,38 +160,41 @@ public:
         warps[cn].delta = -theta;
         warps[cn].M = cv::getAffineTransform(src, dst_n);
 
-        src[0].x = proc_size.width*0.25; src[0].y = proc_size.height * 0.75;
-        src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
-        src[2].x = proc_size.width*0.75; src[2].y = proc_size.height;
         theta = atan2(dp, proc_size.width * 0.5);
-        for (int i = 0; i < dst_n.size(); i++) {
-            dst_n[i] = cv::Point2f(dp * cos(2 * M_PI * (src[i].x - cen.x) / (proc_size.width * 0.5)),
-                                   0);
-            dst_p[i] = src[i] - dst_n[i];
-            dst_n[i] = src[i] + dst_n[i];
+        warps[bp].rmx = cv::Mat::zeros(proc_size, CV_32F);
+        warps[bp].rmy = cv::Mat::zeros(proc_size, CV_32F);
+        warps[bn].rmx = cv::Mat::zeros(proc_size, CV_32F);
+        warps[bn].rmy = cv::Mat::zeros(proc_size, CV_32F);
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                warps[bp].rmx.at<float>(y, x) = x + dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
+                warps[bn].rmx.at<float>(y, x) = x - dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
+                warps[bp].rmy.at<float>(y, x) = y;
+                warps[bn].rmy.at<float>(y, x) = y;
+            }
         }
         warps[bp].axis = b;
         warps[bp].delta = -theta;
-        warps[bp].M = cv::getAffineTransform(src, dst_p);
         warps[bn].delta = theta;
         warps[bn].axis = b;
-        warps[bn].M = cv::getAffineTransform(src, dst_n);
 
-        src[0].x = proc_size.width*0.25; src[0].y = proc_size.height * 0.75;
-        src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
-        src[2].x = proc_size.width; src[2].y = proc_size.height*0.75;
         theta = atan2(dp, proc_size.height * 0.5);
-        for (int i = 0; i < dst_n.size(); i++) {
-            dst_n[i] = cv::Point2f(0, dp * cos(2 * M_PI * (src[i].y - cen.y) / (proc_size.height * 0.5)));
-            dst_p[i] = src[i] - dst_n[i];
-            dst_n[i] = src[i] + dst_n[i];
+        warps[ap].rmx = cv::Mat::zeros(proc_size, CV_32F);
+        warps[ap].rmy = cv::Mat::zeros(proc_size, CV_32F);
+        warps[an].rmx = cv::Mat::zeros(proc_size, CV_32F);
+        warps[an].rmy = cv::Mat::zeros(proc_size, CV_32F);
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                warps[ap].rmx.at<float>(y, x) = x;
+                warps[an].rmx.at<float>(y, x) = x;
+                warps[ap].rmy.at<float>(y, x) = y + dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
+                warps[an].rmy.at<float>(y, x) = y - dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
+            }
         }
         warps[ap].axis = a;
-        warps[ap].delta = theta;
-        warps[ap].M = cv::getAffineTransform(src, dst_p);
-        warps[an].delta = -theta;
+        warps[ap].delta = -theta;
+        warps[an].delta = theta;
         warps[an].axis = a;
-        warps[an].M = cv::getAffineTransform(src, dst_n);
     }
 
     void extract_rois(const cv::Mat &projected)
@@ -319,10 +324,8 @@ public:
     void compare_to_warp_b() 
     {
         //yaw
-        cv::warpAffine(projection.img_warp, warps[bp].img_warp, warps[bp].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
-        cv::warpAffine(projection.img_warp, warps[bn].img_warp, warps[bn].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+        cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
+        cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
 
         warps[bp].score = similarity_score(proc_obs, warps[bp].img_warp);
         warps[bn].score = similarity_score(proc_obs, warps[bn].img_warp);
@@ -330,11 +333,9 @@ public:
 
     void compare_to_warp_a() 
     {
-        //yaw
-        cv::warpAffine(projection.img_warp, warps[ap].img_warp, warps[ap].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
-        cv::warpAffine(projection.img_warp, warps[an].img_warp, warps[an].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+        //pitch
+        cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
+        cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
 
         warps[ap].score = similarity_score(proc_obs, warps[ap].img_warp);
         warps[an].score = similarity_score(proc_obs, warps[an].img_warp);
