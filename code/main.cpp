@@ -74,9 +74,9 @@ public:
             return false;
         }
 
-        int blur = 5;
-        warp_handler.initialise(intrinsics, cv::Size(100, 100), blur);
-        double dp = 1;
+        int blur = 10;
+        warp_handler.initialise(intrinsics, cv::Size(120, 120), blur);
+        double dp = 2;
         warp_handler.create_Ms(dp);
 
         img_size = eros_handler.res;
@@ -130,19 +130,22 @@ public:
             return false;
         }
 
-        std::array<double, 6> s = warp_handler.scores_p;
-        yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
-        s = warp_handler.scores_n;
-        yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
-        yInfo();
+        yInfo() << cv::sum(cv::sum(warp_handler.warps_p[predictions::z]))[0]
+                << cv::sum(cv::sum(warp_handler.proc_proj))[0];
+
+        // std::array<double, 6> s = warp_handler.scores_p;
+        // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
+        // s = warp_handler.scores_n;
+        // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
+        // yInfo();
 
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
 
-        // yInfo() << (int)toc_eros << "\t" 
-        //         << (int)toc_proj << "\t"
-        //         << (int)toc_projproc << "\t"
-        //         << (int)toc_warp;
+        yInfo() << (int)toc_eros << "\t" 
+                << (int)toc_proj << "\t"
+                << (int)toc_projproc << "\t"
+                << (int)toc_warp;
         return true;
     }
 

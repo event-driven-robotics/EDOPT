@@ -30,7 +30,7 @@ cv::Mat process_projected(const cv::Mat &projected, int blur = 10)
 cv::Mat process_eros(cv::Mat eros_img)
 {
     static cv::Mat eros_blurred, eros_f, eros_fn;
-    //cv::GaussianBlur(eros_img, eros_blurred, cv::Size(7, 7), 0);
+    //cv::GaussianBlur(eros_img, eros_blurred, cv::Size(5, 5), 0);
     eros_img.convertTo(eros_f, CV_32F, 0.003921569);
     //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
 
@@ -124,19 +124,9 @@ public:
         M_p[y] = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, dp);
         M_n[y] = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, -dp);
 
-        //z we use the 3 point formula
+        //z we use a scaling matrix
         M_p[z] = cv::getRotationMatrix2D(cen, 0, 1+dp/(proc_size.width));
         M_n[z] = cv::getRotationMatrix2D(cen, 0, 1-dp/(proc_size.width));
-        // for(int i = 0; i < dst_n.size(); i++) 
-        // {
-        //     double du = -(src[i].x-cen.x) * dp / cen.x;
-        //     double dv = -(src[i].y-cen.y) * dp / cen.y;
-        //     dst_n[i] = cv::Point2f(du, dv);
-        //     dst_p[i] = src[i] - dst_n[i];
-        //     dst_n[i] = src[i] + dst_n[i];
-        // }
-        // M_p[z] = cv::getAffineTransform(src, dst_p);
-        // M_n[z] = cv::getAffineTransform(src, dst_n);
 
         //roll we use the 3 point formula
         double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5); 
@@ -223,8 +213,8 @@ public:
 
     void compare_to_warp_x() 
     {
-        cv::warpAffine(proc_proj, warps_p[x], M_p[x], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-        cv::warpAffine(proc_proj, warps_n[x], M_n[x], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_p[x], M_p[x], proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_n[x], M_n[x], proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -238,9 +228,9 @@ public:
 
     void compare_to_warp_y() 
     {
-        cv::warpAffine(proc_proj, warps_p[y], M_p[y], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_p[y], M_p[y], proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
-        cv::warpAffine(proc_proj, warps_n[y], M_n[y], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_n[y], M_n[y], proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -255,12 +245,12 @@ public:
 
     void compare_to_warp_z() 
     {
-        cv::warpAffine(proc_proj, warps_p[z], M_p[z], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_p[z], M_p[z], proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
         // cv::Rect small(dp, dp, proc_size.width-2*dp, proc_size.width-2*dp);
         // cv::resize(proc_proj(small), warps_p[z], warps_p[z].size(), 0, 0, cv::INTER_CUBIC);
         //image_projection(roi).copyTo(warps_p[b](roi));
 
-        cv::warpAffine(proc_proj, warps_n[z], M_n[z], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_n[z], M_n[z], proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
         // cv::resize(proc_proj, warps_p[z](small), small.size(), 0, 0, cv::INTER_CUBIC);
         //image_projection(roi).copyTo(warps_n[b](roi));
 
@@ -283,9 +273,9 @@ public:
         //three point formula//three point formula
         //du = -(v-cy)fx/fy * dc
         //dv = (u-cx)fy/fx * dc
-        cv::warpAffine(proc_proj, warps_p[c], M_p[c], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_p[c], M_p[c], proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
-        cv::warpAffine(proc_proj, warps_n[c], M_n[c], proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        cv::warpAffine(proc_proj, warps_n[c], M_n[c], proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         perform_rotation(states_p[c], 0, theta);
