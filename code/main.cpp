@@ -20,9 +20,6 @@ private:
     EROSdirect eros_handler;
 
     cv::Size img_size;
-    cv::Size proc_size;
-    cv::Rect roi;
-    cv::Size2f proc_scale;
 
     predictions warp_handler;
     std::array<double, 6> intrinsics;
@@ -68,7 +65,9 @@ public:
             return false;
         }
 
-        if(eros_handler.res.width != intrinsics[0] || eros_handler.res.height != intrinsics[1]) 
+        img_size = eros_handler.res;
+
+        if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
         {
             yError() << "Provided camera parameters don't match data";
             return false;
@@ -79,17 +78,13 @@ public:
         double dp = 2;
         warp_handler.create_Ms(dp);
 
-        img_size = eros_handler.res;
-        roi = cv::Rect(cv::Point(0, 0), img_size);
-        proc_size = cv::Size(80, 80);
-
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
-        cv::resizeWindow("EROS", eros_handler.res);
+        cv::resizeWindow("EROS", img_size);
         cv::moveWindow("EROS", 1920, 0);
 
-        eros_u = cv::Mat::zeros(eros_handler.res, CV_8U);
-        eros_f = cv::Mat::zeros(eros_handler.res, CV_32F);
-        proj_f = cv::Mat::zeros(eros_handler.res, CV_32F);
+        eros_u = cv::Mat::zeros(img_size, CV_8U);
+        eros_f = cv::Mat::zeros(img_size, CV_32F);
+        proj_f = cv::Mat::zeros(img_size, CV_32F);
         
         worker = std::thread([this]{main_loop();});
 
