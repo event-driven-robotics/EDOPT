@@ -249,7 +249,7 @@ public:
         static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC3);
         roi_rgb = 0;
         //resize could use nearest to speed up?
-        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_NEAREST);
+        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_LINEAR);
         projection.img_warp = process_projected(roi_rgb, blur);
     }
 
@@ -261,7 +261,7 @@ public:
         //resize could use nearest to speed up?
         proc_obs = 0;
         cv::Mat roi_32f = process_eros(image(img_roi));
-        cv::resize(roi_32f, proc_obs(proc_roi), proc_roi.size(), 0, 0, cv::INTER_NEAREST);
+        cv::resize(roi_32f, proc_obs(proc_roi), proc_roi.size(), 0, 0, cv::INTER_LINEAR);
         //proc_obs = process_eros(roi_u);
 
         projection.score = similarity_score(proc_obs, projection.img_warp);
@@ -270,9 +270,9 @@ public:
     void compare_to_warp_x() 
     {
         cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -287,9 +287,9 @@ public:
     void compare_to_warp_y() 
     {
         cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -317,9 +317,9 @@ public:
     {
         //roll
         cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         warps[cp].score = similarity_score(proc_obs, warps[cp].img_warp);
         warps[cn].score = similarity_score(proc_obs, warps[cn].img_warp);
