@@ -80,12 +80,13 @@ public:
     ev::window<ev::AE> input_port;
     ev::EROS eros;
     std::thread eros_worker;
+    double tic{-1};
 
     void erosUpdate() 
     {
         while (!input_port.isStopping()) {
-            double t = Time::now();
             ev::info my_info = input_port.readAll(true);
+            tic = my_info.timestamp;
             for(auto &v : input_port)
                 eros.update(v.x, v.y);
         }

@@ -27,12 +27,17 @@ private:
 
     std::array<double, 7> default_state = {0, 0, -300, 0.0, -1.0, 0.0, 0};
     std::array<double, 7> state;
+    std::deque< std::array<double, 8> > data_to_save;
+
     SICAD* si_cad;
 
     cv::Mat proj_rgb, eros_u;
     double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
     int toc_count{0};
     bool step{false};
+
+    std::ofstream fs;
+    std::string file_name;
 
 public:
 
@@ -72,16 +77,10 @@ public:
         if(!si_cad)
             return false;
 
-        
-
-
-        
         // if(!eros_handler.start(bias_sens, cam_filter)) 
         // {
         //     return false;
         // }
-
-        
 
         // if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
         // {
@@ -112,6 +111,16 @@ public:
 
         //quaternion_test();
         worker = std::thread([this]{main_loop();});
+
+        if (rf.check("file")) {
+            fs.open(rf.find("file").asString());
+            if (!fs.is_open()) {
+                yError() << "Could not open output file"
+                         << rf.find("file").asString();
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -168,6 +177,7 @@ public:
 
     void main_loop()
     {
+        double dataset_time = -1;
         warp_handler.set_current(state);
         while (!isStopping()) {
 
@@ -186,6 +196,7 @@ public:
             double dtoc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
+            dataset_time = eros_handler.tic;
             warp_handler.set_observation(eros_u);
             double dtoc_eros = Time::now();
             
@@ -211,6 +222,9 @@ public:
             this->toc_projproc += ((dtoc_projproc - dtoc_proj) * 1e6);
             this->toc_warp += ((dtoc_warp - dtoc_eros) * 1e6);
             this->toc_count++;
+            if (fs.is_open() && dataset_time > 0) {
+                data_to_save.push_back({dataset_time, state[0], state[1], state[2], state[3], state[4], state[5], state[6]});
+            }
         }
     }
 
@@ -229,8 +243,6 @@ public:
             cv::waitKey(1);
             perform_rotation(state, 2, delta);
         }
-        state = default_state;
-        cv::destroyWindow("qtest");
     }
 
     // bool interruptModule() override
@@ -240,6 +252,14 @@ public:
     {
         eros_handler.stop();
         worker.join();
+        if(fs.is_open())
+        {
+            yInfo() << "Writing data ...";
+            for(auto i : data_to_save)
+                fs << i[0] << ", " << i[1] << ", " << i[2] << ", " << i[3] << ", " << i[4] << ", " << i[5] << ", " << i[6] << ", " << i[7] << std::endl;
+            fs.close();
+            yInfo() << "Finished Writing data ...";
+        }
         return true;
     }
 
