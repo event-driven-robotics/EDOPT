@@ -28,12 +28,12 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
 
 
     return new SICAD(obj,
-                     intrinsic_parameters.find("w").asInt(),
-                     intrinsic_parameters.find("h").asInt(),
-                     intrinsic_parameters.find("fx").asDouble(),
-                     intrinsic_parameters.find("fy").asDouble(),
-                     intrinsic_parameters.find("cx").asDouble(),
-                     intrinsic_parameters.find("cy").asDouble());
+                     intrinsic_parameters.find("w").asInt32(),
+                     intrinsic_parameters.find("h").asInt32(),
+                     intrinsic_parameters.find("fx").asFloat32(),
+                     intrinsic_parameters.find("fy").asFloat32(),
+                     intrinsic_parameters.find("cx").asFloat32(),
+                     intrinsic_parameters.find("cy").asFloat32());
 
 }
 
@@ -82,7 +82,7 @@ bool loadObjectPose(yarp::os::ResourceFinder &config, Superimpose::ModelPose &ob
 
     obj_pose.clear();
     for(size_t i = 0; i < loaded_pose->size(); i++)
-        obj_pose.push_back(loaded_pose->get(i).asDouble());
+        obj_pose.push_back(loaded_pose->get(i).asFloat32());
 
     return true;
 

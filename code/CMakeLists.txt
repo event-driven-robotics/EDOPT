@@ -25,6 +25,7 @@ find_package(event-driven REQUIRED)
 #                          USE_LINK_PATH)
 
 add_executable(sixdofobject main.cpp projection.h erosdirect.h comparison.h)
+target_compile_features(sixdofobject PRIVATE cxx_std_17)
 #target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
 target_link_libraries(sixdofobject PRIVATE  YARP_init
                                             YARP_os

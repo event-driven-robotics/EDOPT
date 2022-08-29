@@ -53,12 +53,12 @@ public:
             return false;
         }
 
-        intrinsics[0] = intrinsic_parameters.find("w").asInt();
-        intrinsics[1] = intrinsic_parameters.find("h").asInt();
-        intrinsics[2] = intrinsic_parameters.find("cx").asDouble();
-        intrinsics[3] = intrinsic_parameters.find("cy").asDouble();
-        intrinsics[4] = intrinsic_parameters.find("fx").asDouble();
-        intrinsics[5] = intrinsic_parameters.find("fy").asDouble();
+        intrinsics[0] = intrinsic_parameters.find("w").asInt32();
+        intrinsics[1] = intrinsic_parameters.find("h").asInt32();
+        intrinsics[2] = intrinsic_parameters.find("cx").asFloat32();
+        intrinsics[3] = intrinsic_parameters.find("cy").asFloat32();
+        intrinsics[4] = intrinsic_parameters.find("fx").asFloat32();
+        intrinsics[5] = intrinsic_parameters.find("fy").asFloat32();
 
         state = default_state;
         img_size = cv::Size(intrinsics[0], intrinsics[1]);
@@ -68,7 +68,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEf:i"))) {
+        if (!eros_handler.start(img_size, "/file/leftdvs:o", getName("/AEf:i"))) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
