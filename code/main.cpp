@@ -29,7 +29,8 @@ private:
     SICAD* si_cad;
 
     cv::Mat proj_rgb, eros_u;
-    double tic, toc_eros, toc_proj, toc_projproc, toc_warp;
+    double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
+    int toc_count{0};
     bool step{false};
 
 public:
@@ -37,8 +38,8 @@ public:
     bool configure(yarp::os::ResourceFinder& rf) override
     {
 
-        double bias_sens = rf.check("s", Value(0.5)).asFloat64();
-        double cam_filter = rf.check("f", Value(0.01)).asFloat64();
+        double bias_sens = rf.check("s", Value(0.6)).asFloat64();
+        double cam_filter = rf.check("f", Value(0.1)).asFloat64();
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
@@ -86,9 +87,6 @@ public:
         eros_u = cv::Mat::zeros(img_size, CV_8U);
         proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
 
-        
-        worker = std::thread([this]{main_loop();});
-
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
         cv::moveWindow("Translations", 0, 540);
@@ -97,6 +95,8 @@ public:
         cv::resizeWindow("Rotations", img_size);
         cv::moveWindow("Rotations", 700, 540);
 
+        //quaternion_test();
+        worker = std::thread([this]{main_loop();});
         return true;
     }
 
@@ -104,6 +104,8 @@ public:
     {
         return 0.1;
     }
+
+
 
     bool updateModule() override
     {
@@ -141,10 +143,13 @@ public:
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
 
-        yInfo() << (int)toc_eros << "\t" 
-                << (int)toc_proj << "\t"
-                << (int)toc_projproc << "\t"
-                << (int)toc_warp;
+        if (toc_count) {
+            yInfo() << (int)(toc_eros / toc_count) << "\t"
+                    << (int)(toc_proj / toc_count) << "\t"
+                    << (int)(toc_projproc / toc_count) << "\t"
+                    << (int)(toc_warp / toc_count);
+            toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
+        }
         return true;
     }
 
@@ -153,7 +158,7 @@ public:
         warp_handler.set_current(state);
         while (!isStopping()) {
 
-            double tic = Time::now();
+            double dtic = Time::now();
 
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
             if (!simpleProjection(si_cad, pose, proj_rgb)) {
@@ -162,15 +167,14 @@ public:
             }
 
             warp_handler.extract_rois(proj_rgb);
-            double toc_proj = Time::now();
+            double dtoc_proj = Time::now();
                         
             warp_handler.set_projection(state, proj_rgb);
-            double toc_projproc = Time::now();
+            double dtoc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
-            
             warp_handler.set_observation(eros_u);
-            double toc_eros = Time::now();
+            double dtoc_eros = Time::now();
             
             warp_handler.compare_to_warp_x();
             warp_handler.compare_to_warp_y();
@@ -181,16 +185,39 @@ public:
             
             if(step) {
                 warp_handler.update_from_max();
+                //warp_handler.update_all_possible();
                 state = warp_handler.state_current;
                 step = true;
             }
-            double toc_warp = Time::now();
+            
+            double dtoc_warp = Time::now();
+            //yInfo() << "update:"<< dtoc_eros - dtoc_warp;
 
-            this->toc_eros= ((toc_eros - toc_projproc) * 10e3);
-            this->toc_proj= ((toc_proj - tic) * 10e3);
-            this->toc_projproc = ((toc_projproc - toc_proj) * 10e3);
-            this->toc_warp= ((toc_warp - toc_eros) * 10e3);
+            this->toc_eros += ((dtoc_eros - dtoc_projproc) * 1e6);
+            this->toc_proj += ((dtoc_proj - dtic) * 1e6);
+            this->toc_projproc += ((dtoc_projproc - dtoc_proj) * 1e6);
+            this->toc_warp += ((dtoc_warp - dtoc_eros) * 1e6);
+            this->toc_count++;
         }
+    }
+
+    void quaternion_test()
+    {
+        double delta = -0.01;
+
+        for(double th = 0.0; th > -2*M_PI; th+=delta)
+        {
+            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return;
+            }
+            cv::imshow("qtest", proj_rgb);
+            cv::waitKey(1);
+            perform_rotation(state, 2, delta);
+        }
+        state = default_state;
+        cv::destroyWindow("qtest");
     }
 
     // bool interruptModule() override
