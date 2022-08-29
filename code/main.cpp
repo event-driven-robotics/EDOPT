@@ -20,9 +20,6 @@ private:
     EROSdirect eros_handler;
 
     cv::Size img_size;
-    cv::Size proc_size;
-    cv::Rect roi;
-    cv::Size2f proc_scale;
 
     predictions warp_handler;
     std::array<double, 6> intrinsics;
@@ -31,8 +28,9 @@ private:
     std::array<double, 7> state;
     SICAD* si_cad;
 
-    cv::Mat eros_u, eros_f, proj_f;
-    double tic, toc_eros, toc_proj, toc_projproc, toc_warp;
+    cv::Mat proj_rgb, eros_u;
+    double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
+    int toc_count{0};
     bool step{false};
 
 public:
@@ -40,8 +38,8 @@ public:
     bool configure(yarp::os::ResourceFinder& rf) override
     {
 
-        double bias_sens = rf.check("s", Value(0.5)).asFloat64();
-        double cam_filter = rf.check("f", Value(0.01)).asFloat64();
+        double bias_sens = rf.check("s", Value(0.6)).asFloat64();
+        double cam_filter = rf.check("f", Value(0.1)).asFloat64();
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
@@ -68,50 +66,38 @@ public:
             return false;
         }
 
-        if(eros_handler.res.width != intrinsics[0] || eros_handler.res.height != intrinsics[1]) 
+        img_size = eros_handler.res;
+
+        if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
         {
             yError() << "Provided camera parameters don't match data";
             return false;
         }
 
-        warp_handler.set_intrinsics(intrinsics);
-
-        img_size = eros_handler.res;
-        roi = cv::Rect(cv::Point(0, 0), img_size);
-        proc_size = cv::Size(80, 80);
+        int rescale_size = 120;
+        int blur = rescale_size / 10;
+        double dp =  1;//+rescale_size / 100;
+        warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
+        warp_handler.create_Ms(dp);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
-        cv::resizeWindow("EROS", eros_handler.res);
-        cv::moveWindow("EROS", 1920, 0);
+        cv::resizeWindow("EROS", img_size);
+        cv::moveWindow("EROS", 0, 0);
 
-        eros_u = cv::Mat::zeros(eros_handler.res, CV_8U);
-        eros_f = cv::Mat::zeros(eros_handler.res, CV_32F);
-        proj_f = cv::Mat::zeros(eros_handler.res, CV_32F);
-        
-        worker = std::thread([this]{main_loop();});
+        eros_u = cv::Mat::zeros(img_size, CV_8U);
+        proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
 
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
-        cv::moveWindow("Translations", 1920, 540);
+        cv::moveWindow("Translations", 0, 540);
 
         cv::namedWindow("Rotations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Rotations", img_size);
-        cv::moveWindow("Rotations", 2600, 540);
+        cv::moveWindow("Rotations", 700, 540);
 
+        //quaternion_test();
+        worker = std::thread([this]{main_loop();});
         return true;
-    }
-
-    void set_roi(cv::Mat projected, int buffer)
-    {
-        static cv::Mat grey;
-        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
-        roi = cv::boundingRect(grey);
-        roi.x -= buffer; roi.y-= buffer;
-        roi.width += buffer*2; roi.height += buffer*2;
-        //limit the roi to the image space.        
-        roi = roi & cv::Rect(cv::Point(0, 0), img_size);
-        proc_scale.height = (double)roi.height / (double)img_size.height;
-        proc_scale.width = (double)roi.width / (double)img_size.width;
     }
 
     double getPeriod() override
@@ -119,10 +105,15 @@ public:
         return 0.1;
     }
 
+
+
     bool updateModule() override
     {
-        static cv::Mat vis;
-        vis = make_visualisation(eros_u, proj_f, roi);
+        static cv::Mat vis, proj_vis, eros_vis;
+        //vis = warp_handler.make_visualisation(eros_u);
+        proj_rgb.copyTo(proj_vis);
+        cv::cvtColor(eros_u, eros_vis, cv::COLOR_GRAY2BGR);
+        vis = proj_rgb*0.5 + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
@@ -132,66 +123,101 @@ public:
         cv::imshow("Rotations", warps_r+0.5);
         int c = cv::waitKey(1);
         if (c == 32)
-            state = default_state;
+            warp_handler.set_current(default_state);
         if (c == 'g')
             step = true;
         if(c == 27) {
             stopModule();
             return false;
         }
-        yInfo() << (int)toc_eros << "\t" 
-                << (int)toc_proj << "\t"
-                << (int)toc_projproc << "\t"
-                << (int)toc_warp;
+
+        // yInfo() << cv::sum(cv::sum(warp_handler.warps[predictions::z].img_warp))[0]
+        //         << cv::sum(cv::sum(warp_handler.projection.img_warp))[0];
+
+        // std::array<double, 6> s = warp_handler.scores_p;
+        // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
+        // s = warp_handler.scores_n;
+        // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
+        // yInfo();
+
+        // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
+        //         << state[5] << state[6];
+
+        if (toc_count) {
+            yInfo() << (int)(toc_eros / toc_count) << "\t"
+                    << (int)(toc_proj / toc_count) << "\t"
+                    << (int)(toc_projproc / toc_count) << "\t"
+                    << (int)(toc_warp / toc_count);
+            toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
+        }
         return true;
     }
 
     void main_loop()
     {
-        int dp = 2;
-        int blur = 10;
+        warp_handler.set_current(state);
         while (!isStopping()) {
 
-            double tic = Time::now();
+            double dtic = Time::now();
 
-            static cv::Mat projected_image = cv::Mat::zeros(img_size, CV_8UC3);
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, projected_image)) {
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return;
-
             }
-            set_roi(projected_image, blur+dp);
-            double toc_proj = Time::now();
 
-            proj_f = process_projected(projected_image(roi), proc_size, blur);
-            double toc_projproc = Time::now();
+            warp_handler.extract_rois(proj_rgb);
+            double dtoc_proj = Time::now();
+                        
+            warp_handler.set_projection(state, proj_rgb);
+            double dtoc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
-            eros_f = process_eros(eros_u(roi), proc_size);
-            double toc_eros = Time::now();
+            warp_handler.set_observation(eros_u);
+            double dtoc_eros = Time::now();
             
-            warp_handler.set_current(state);
-            warp_handler.set_projection(state, proj_f, roi);
-            warp_handler.reset_comparison(eros_f);
-            warp_handler.compare_to_warp_x(eros_f, dp);
-            warp_handler.compare_to_warp_y(eros_f, dp);
-            warp_handler.compare_to_warp_z(eros_f, dp);
-            //warp_handler.compare_to_warp_a(eros_f, dp);
-            //warp_handler.compare_to_warp_b(eros_f, dp);
-            warp_handler.compare_to_warp_c(eros_f, dp);
+            warp_handler.compare_to_warp_x();
+            warp_handler.compare_to_warp_y();
+            warp_handler.compare_to_warp_z();
+            warp_handler.compare_to_warp_a();
+            warp_handler.compare_to_warp_b();
+            warp_handler.compare_to_warp_c();
             
             if(step) {
-                state = warp_handler.next_best();
+                warp_handler.update_from_max();
+                //warp_handler.update_all_possible();
+                state = warp_handler.state_current;
                 step = true;
             }
-            double toc_warp = Time::now();
+            
+            double dtoc_warp = Time::now();
+            //yInfo() << "update:"<< dtoc_eros - dtoc_warp;
 
-            this->toc_eros= ((toc_eros - toc_projproc) * 10e3);
-            this->toc_proj= ((toc_proj - tic) * 10e3);
-            this->toc_projproc = ((toc_projproc - toc_proj) * 10e3);
-            this->toc_warp= ((toc_warp - toc_eros) * 10e3);
+            this->toc_eros += ((dtoc_eros - dtoc_projproc) * 1e6);
+            this->toc_proj += ((dtoc_proj - dtic) * 1e6);
+            this->toc_projproc += ((dtoc_projproc - dtoc_proj) * 1e6);
+            this->toc_warp += ((dtoc_warp - dtoc_eros) * 1e6);
+            this->toc_count++;
         }
+    }
+
+    void quaternion_test()
+    {
+        double delta = -0.01;
+
+        for(double th = 0.0; th > -2*M_PI; th+=delta)
+        {
+            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return;
+            }
+            cv::imshow("qtest", proj_rgb);
+            cv::waitKey(1);
+            perform_rotation(state, 2, delta);
+        }
+        state = default_state;
+        cv::destroyWindow("qtest");
     }
 
     // bool interruptModule() override
