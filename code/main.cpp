@@ -17,7 +17,9 @@ class tracker : public yarp::os::RFModule
 private:
 
     std::thread worker;
-    EROSdirect eros_handler;
+    bool camera;
+    EROSdirect eros_handler_metavision;
+    EROSfromYARP eros_handler_yarp;
 
     cv::Size img_size;
 
@@ -39,6 +41,7 @@ public:
 
         double bias_sens = rf.check("s", Value(0.5)).asFloat64();
         double cam_filter = rf.check("f", Value(0.01)).asFloat64();
+        camera = rf.check("cam", Value(false)).asBool();
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
@@ -59,13 +62,20 @@ public:
         if(!si_cad)
             return false;
 
-        
-        if(!eros_handler.start(bias_sens, cam_filter)) 
-        {
-            return false;
+        if(camera){
+            if(!eros_handler_metavision.start(bias_sens, cam_filter)) 
+            {
+                return false;
+            }
+            img_size = eros_handler_metavision.res;
         }
-
-        img_size = eros_handler.res;
+        else{
+            if(!eros_handler_yarp.start(cam_filter)) 
+            {
+                return false;
+            }
+            img_size = eros_handler_yarp.res;
+        }
 
         if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
         {
@@ -167,8 +177,11 @@ public:
             warp_handler.set_projection(state, proj_rgb);
             double toc_projproc = Time::now();
 
-            eros_handler.eros.getSurface().copyTo(eros_u);
-            
+            if(camera)
+                eros_handler_metavision.eros.getSurface().copyTo(eros_u);
+            else
+                eros_handler_yarp.eros.getSurface().copyTo(eros_u);
+
             warp_handler.set_observation(eros_u);
             double toc_eros = Time::now();
             
@@ -190,6 +203,9 @@ public:
             this->toc_proj= ((toc_proj - tic) * 10e3);
             this->toc_projproc = ((toc_projproc - toc_proj) * 10e3);
             this->toc_warp= ((toc_warp - toc_eros) * 10e3);
+
+
+            // yInfo() << yarp::os::Time::now()-toc_warp <<  state[0] << state[1] << state[2]<< state[3]<< state[4]<< state[5]<< state[6];
         }
     }
 

@@ -72,3 +72,73 @@ public:
     }
 
 };
+
+class EROSthread:public Thread{
+
+public:
+
+    ev::EROS *eros;
+    ev::window<ev::AE> *input_port;
+
+    void initialise(ev::EROS *eros, ev::window<ev::AE> *input_port){
+
+        this->eros=eros;
+        this->input_port=input_port;
+
+    }
+
+    void run(){
+
+        ev::info read_stats = input_port->readAll(true);
+        if(input_port->isStopping()) return;
+
+        while (!isStopping()) {
+
+            ev::info my_info = input_port->readAll(true);
+            yInfo()<<"Event: "<<my_info.count<<my_info.duration<<my_info.timestamp;
+
+            if(input_port->isStopping())
+                break;
+            for(auto a = input_port->begin(); a != input_port->end(); a++)
+                eros->update((*a).x, (*a).y);
+        }
+    }
+
+
+};
+
+class EROSfromYARP
+{
+public:
+    ev::EROS eros;
+    ev::vNoiseFilter filter;
+    cv::Size res;
+    ev::window<ev::AE> input_port;
+    EROSthread eros_thread;
+
+    bool start(double filter_value)
+    {
+
+        res =  cv::Size(640, 480);
+        eros.init(res.width, res.height, 7, 0.3);
+        filter.use_temporal_filter(filter_value);
+        filter.initialise(res.width, res.height);
+
+        if (!input_port.open("/ekom/AE:i"))
+            return false;
+
+        yarp::os::Network::connect("/file/leftdvs:o", "/ekom/AE:i", "fast_tcp");
+
+        eros_thread.initialise(&eros, &input_port);
+        eros_thread.start();
+
+        return true;
+    }
+
+    void stop()
+    {
+        eros_thread.stop();
+        input_port.stop();
+    }
+
+};
