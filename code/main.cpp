@@ -17,7 +17,8 @@ class tracker : public yarp::os::RFModule
 private:
 
     std::thread worker;
-    EROSdirect eros_handler;
+    //EROSdirect eros_handler;
+    EROSfromYARP eros_handler;
 
     cv::Size img_size;
 
@@ -37,7 +38,7 @@ public:
 
     bool configure(yarp::os::ResourceFinder& rf) override
     {
-
+        setName(rf.check("name", Value("/ekom")).asString().c_str());
         double bias_sens = rf.check("s", Value(0.6)).asFloat64();
         double cam_filter = rf.check("f", Value(0.1)).asFloat64();
 
@@ -55,24 +56,38 @@ public:
         intrinsics[5] = intrinsic_parameters.find("fy").asDouble();
 
         state = default_state;
+        img_size = cv::Size(intrinsics[0], intrinsics[1]);
+
+        if(!Network::checkNetwork(1.0)) {
+            yError() << "could not connect to YARP";
+            return false;
+        }
+
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEf:i"))) {
+            yError() << "could not open the YARP eros handler";
+            return false;
+        }
 
         si_cad = createProjectorClass(rf);
         if(!si_cad)
             return false;
 
         
-        if(!eros_handler.start(bias_sens, cam_filter)) 
-        {
-            return false;
-        }
 
-        img_size = eros_handler.res;
 
-        if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
-        {
-            yError() << "Provided camera parameters don't match data";
-            return false;
-        }
+        
+        // if(!eros_handler.start(bias_sens, cam_filter)) 
+        // {
+        //     return false;
+        // }
+
+        
+
+        // if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
+        // {
+        //     yError() << "Provided camera parameters don't match data";
+        //     return false;
+        // }
 
         int rescale_size = 120;
         int blur = rescale_size / 10;
@@ -223,6 +238,7 @@ public:
     // }
     bool close() override
     {
+        eros_handler.stop();
         worker.join();
         return true;
     }
