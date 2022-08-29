@@ -109,7 +109,9 @@ public:
         cv::resizeWindow("Rotations", img_size);
         cv::moveWindow("Rotations", 700, 540);
 
-        //quaternion_test();
+        // quaternion_test(true);
+        // return quaternion_test(false);
+
         worker = std::thread([this]{main_loop();});
 
         if (rf.check("file")) {
@@ -228,21 +230,47 @@ public:
         }
     }
 
-    void quaternion_test()
+    bool quaternion_test(bool return_value)
     {
-        double delta = -0.01;
+        double delta = 0.01;
 
-        for(double th = 0.0; th > -2*M_PI; th+=delta)
+        for(double th = 0.0; th > -M_PI_2; th-=delta)
         {
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
             if (!simpleProjection(si_cad, pose, proj_rgb)) {
                 yError() << "Could not perform projection";
-                return;
+                return false;
             }
             cv::imshow("qtest", proj_rgb);
             cv::waitKey(1);
             perform_rotation(state, 2, delta);
         }
+
+        for(double th = 0.0; th > -M_PI_2; th-=delta)
+        {
+            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return false;
+            }
+            cv::imshow("qtest", proj_rgb);
+            cv::waitKey(1);
+            perform_rotation(state, 1, delta);
+        }
+
+        for(double th = 0.0; th > -M_PI_2; th-=delta)
+        {
+            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return false;
+            }
+            cv::imshow("qtest", proj_rgb);
+            cv::waitKey(1);
+            perform_rotation(state, 0, delta);
+        }
+
+        return return_value;
     }
 
     // bool interruptModule() override
