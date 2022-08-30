@@ -4,6 +4,33 @@
 #include <opencv2/opencv.hpp>
 #include <yarp/os/all.h>
 
+Superimpose::ModelPose quaternion_to_axisangle(const std::array<double, 7> &state)
+{
+    Superimpose::ModelPose pose;
+    pose.resize(7);
+
+    pose[0] = state[0]; //x
+    pose[1] = state[1]; //y
+    pose[2] = state[2]; //z
+
+    //if acos return -nan it means the quaternion wasn't normalised !
+    pose[6] = 2 * acos(state[3]); //state[3] is w, pose[6] = angle
+    double scaler =  sqrt(1 - state[3]*state[3]);
+    if(scaler < 0.001) { //angle is close to 0 so it is insignificant (but don't divide by 0)
+        pose[6] = 0.0; //angle
+        pose[3] = 1.0; //ax
+        pose[4] = 0.0; //ay
+        pose[5] = 0.0; //az
+    } else {
+        scaler = 1.0 / scaler;
+        pose[3] = state[3] * scaler;
+        pose[4] = state[4] * scaler;
+        pose[5] = state[5] * scaler;
+    }
+
+    return pose;
+}
+
 
 SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
 {
@@ -34,6 +61,18 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
                      intrinsic_parameters.find("fy").asFloat32(),
                      intrinsic_parameters.find("cx").asFloat32(),
                      intrinsic_parameters.find("cy").asFloat32());
+
+}
+
+bool complexProjection(SICAD *si_cad, std::array<double, 7> camera, Superimpose::ModelPose object, cv::Mat &image) {
+
+    Superimpose::ModelPoseContainer objpose_map;
+
+    Superimpose::ModelPose cp = quaternion_to_axisangle(camera);
+    objpose_map.emplace("model", object);
+
+
+    return si_cad->superimpose(objpose_map, &(cp[0]), &(cp[3]), image);
 
 }
 
@@ -100,32 +139,7 @@ void normalise_quaternion(std::vector<double> &state)
     state[6] *= normval;
 }
 
-Superimpose::ModelPose quaternion_to_axisangle(const std::array<double, 7> &state)
-{
-    Superimpose::ModelPose pose;
-    pose.resize(7);
 
-    pose[0] = state[0]; //x
-    pose[1] = state[1]; //y
-    pose[2] = state[2]; //z
-
-    //if acos return -nan it means the quaternion wasn't normalised !
-    pose[6] = 2 * acos(state[3]); //state[3] is w, pose[6] = angle
-    double scaler =  sqrt(1 - state[3]*state[3]);
-    if(scaler < 0.001) { //angle is close to 0 so it is insignificant (but don't divide by 0)
-        pose[6] = 0.0; //angle
-        pose[3] = 1.0; //ax
-        pose[4] = 0.0; //ay
-        pose[5] = 0.0; //az
-    } else {
-        scaler = 1.0 / scaler;
-        pose[3] = state[4] * scaler;
-        pose[4] = state[5] * scaler;
-        pose[5] = state[6] * scaler;
-    }
-
-    return pose;
-}
 
 Superimpose::ModelPose euler_to_axisangle(const std::vector<double> &state)
 {

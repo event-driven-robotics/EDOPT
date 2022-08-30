@@ -25,7 +25,9 @@ private:
     predictions warp_handler;
     std::array<double, 6> intrinsics;
 
-    std::array<double, 7> default_state = {0, 0, -300, 0.0, -1.0, 0.0, 0};
+    //std::array<double, 7> default_state = {0, 0, 0.92, 0, 0, 0.7071068, 0.7071068};
+    std::array<double, 7> default_camera = {0, 0, 0, 1, 0, 0, 0};
+    std::array<double, 7> default_state = {0.071233000755310059, 0.02, 0.76664299011230469, 0.212599992752075,0.674399971961975,-0.674399971961975,0.212599992752075};
     std::array<double, 7> state;
     std::deque< std::array<double, 8> > data_to_save;
 
@@ -63,19 +65,21 @@ public:
         state = default_state;
         img_size = cv::Size(intrinsics[0], intrinsics[1]);
 
-        if(!Network::checkNetwork(1.0)) {
+        si_cad = createProjectorClass(rf);
+        if(!si_cad)
+            return false;
+
+        if (!Network::checkNetwork(1.0))
+        {
             yError() << "could not connect to YARP";
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/file/leftdvs:o", getName("/AEf:i"))) {
+        if (!eros_handler.start(img_size, "/file/leftdvs:o", getName("/AEf:i")))
+        {
             yError() << "could not open the YARP eros handler";
             return false;
         }
-
-        si_cad = createProjectorClass(rf);
-        if(!si_cad)
-            return false;
 
         // if(!eros_handler.start(bias_sens, cam_filter)) 
         // {
@@ -110,9 +114,14 @@ public:
         cv::moveWindow("Rotations", 700, 540);
 
         // quaternion_test(true);
-        // return quaternion_test(false);
+        // for(int i = 0; i < 10; i++)
+        //     quaternion_test(true);
+        //  return quaternion_test(false);
+        //return quaternion_test_camera(false);
 
-        worker = std::thread([this]{main_loop();});
+
+
+        worker = std::threa intrinsics[1] = intrinsic_parameters.find("h").asInt32();d([this]{main_loop();});
 
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
@@ -181,12 +190,16 @@ public:
     {
         double dataset_time = -1;
         warp_handler.set_current(state);
+        auto camera = default_camera;
+        perform_rotation(camera, 0, M_PI);
+        for(auto i : camera)
+            yInfo() << i;
         while (!isStopping()) {
 
             double dtic = Time::now();
 
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return;
             }
@@ -269,6 +282,75 @@ public:
             cv::waitKey(1);
             perform_rotation(state, 0, delta);
         }
+        yInfo() <<"Done";
+
+        return return_value;
+    }
+
+    bool quaternion_test_camera(bool return_value)
+    {
+        //{0.071233000755310059, 0.02, 0.76664299011230469, 0.212599992752075,0.674399971961975,-0.674399971961975,0.212599992752075};
+        
+        std::array<double, 7> state = {0.071233000755310059, 0.02, 0.76664299011230469, 0.212599992752075,0.674399971961975,-0.674399971961975,0.212599992752075};
+
+        //{-0.7, 0.05, 0.87} 
+        std::array<double, 7> camera = {0, 0, 0, 1, 0, 0, 0};
+        perform_rotation(camera, 0, M_PI);
+        //perform_rotation(camera, 0, M_PI);
+        //perform_rotation(camera, 1, M_PI);
+
+
+
+        Superimpose::ModelPose pose = quaternion_to_axisangle(state);
+        for(auto i =0; i < pose.size(); i++) 
+            yInfo() << pose[i];
+        // perform_rotation(camera, 2, M_PI);
+        // perform_rotation(camera, 0, M_PI);
+        yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+        double delta = 0.1;
+
+        yInfo() << "First Rotation";
+        for(double th = 0.0; th < 2*M_PI; th+=delta)
+        {
+            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return false;
+            }
+            cv::imshow("qtest", proj_rgb);
+            if(cv::waitKey() == '\e') return false;
+            perform_rotation(camera, 2, delta);
+            yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+            yInfo() << 2 << th;
+        }
+
+        yInfo() << "Second Rotation";
+        for(double th = 0.0; th < 2*M_PI; th+=delta)
+        {
+            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return false;
+            }
+            cv::imshow("qtest", proj_rgb);
+            if(cv::waitKey() == '\e') return false;
+            perform_rotation(camera, 1, delta);
+            yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+            yInfo() << 1 << th;
+        }
+
+        yInfo() << "Third Rotation";
+        for(double th = 0.0; th < 2*M_PI; th+=delta)
+        {
+            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+                yError() << "Could not perform projection";
+                return false;
+            }
+            cv::imshow("qtest", proj_rgb);
+            if(cv::waitKey() == '\e') return false;
+            perform_rotation(camera, 0, delta);
+            yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+            yInfo() << 0 << th;
+        }
+        yInfo()<< "Done";
 
         return return_value;
     }
