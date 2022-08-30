@@ -27,7 +27,7 @@ private:
 
     //std::array<double, 7> default_state = {0, 0, 0.92, 0, 0, 0.7071068, 0.7071068};
     std::array<double, 7> default_camera = {0, 0, 0, 1, 0, 0, 0};
-    std::array<double, 7> default_state = {0.071233000755310059, 0.02, 0.76664299011230469, 0.212599992752075,0.674399971961975,-0.674399971961975,0.212599992752075};
+    std::array<double, 7> default_state = {0, 0, -300, -1, 0, 0, 0};
     std::array<double, 7> state;
     std::deque< std::array<double, 8> > data_to_save;
 
@@ -37,6 +37,7 @@ private:
     double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
     int toc_count{0};
     bool step{false};
+    double period{0.1};
 
     std::ofstream fs;
     std::string file_name;
@@ -65,21 +66,19 @@ public:
         state = default_state;
         img_size = cv::Size(intrinsics[0], intrinsics[1]);
 
-        si_cad = createProjectorClass(rf);
-        if(!si_cad)
-            return false;
-
-        if (!Network::checkNetwork(1.0))
-        {
+        if(!Network::checkNetwork(1.0)) {
             yError() << "could not connect to YARP";
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/file/leftdvs:o", getName("/AEf:i")))
-        {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEd:i"))) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
+
+        si_cad = createProjectorClass(rf);
+        if(!si_cad)
+            return false;
 
         // if(!eros_handler.start(bias_sens, cam_filter)) 
         // {
@@ -92,9 +91,9 @@ public:
         //     return false;
         // }
 
-        int rescale_size = 120;
-        int blur = rescale_size / 10;
-        double dp =  1;//+rescale_size / 100;
+        int rescale_size = 200;
+        int blur = rescale_size / 20;
+        double dp =  2;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
         warp_handler.create_Ms(dp);
 
@@ -137,7 +136,7 @@ public:
 
     double getPeriod() override
     {
-        return 0.1;
+        return period;
     }
 
     bool updateModule() override
@@ -180,7 +179,8 @@ public:
             yInfo() << (int)(toc_eros / toc_count) << "\t"
                     << (int)(toc_proj / toc_count) << "\t"
                     << (int)(toc_projproc / toc_count) << "\t"
-                    << (int)(toc_warp / toc_count);
+                    << (int)(toc_warp / toc_count) << "\t"
+                    << (int) toc_count / period << "Hz";
             toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
         }
         return true;
@@ -191,7 +191,7 @@ public:
         double dataset_time = -1;
         warp_handler.set_current(state);
         auto camera = default_camera;
-        perform_rotation(camera, 0, M_PI);
+        //perform_rotation(camera, 0, M_PI);
         for(auto i : camera)
             yInfo() << i;
         while (!isStopping()) {
@@ -199,7 +199,7 @@ public:
             double dtic = Time::now();
 
             Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+            if (!simpleProjection(si_cad, pose, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return;
             }
@@ -223,8 +223,8 @@ public:
             warp_handler.compare_to_warp_c();
             
             if(step) {
-                warp_handler.update_from_max();
-                //warp_handler.update_all_possible();
+                //warp_handler.update_from_max();
+                warp_handler.update_all_possible();
                 state = warp_handler.state_current;
                 step = true;
             }
@@ -360,7 +360,9 @@ public:
     // }
     bool close() override
     {
+        yInfo() << "waiting for eros handler ... ";
         eros_handler.stop();
+        yInfo() << "waiting for workther thread ... ";
         worker.join();
         if(fs.is_open())
         {
@@ -370,6 +372,7 @@ public:
             fs.close();
             yInfo() << "Finished Writing data ...";
         }
+        yInfo() << "close function finished";
         return true;
     }
 
@@ -379,7 +382,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
-    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/");
+    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/config.ini");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);

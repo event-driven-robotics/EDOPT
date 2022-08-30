@@ -265,15 +265,15 @@ public:
         //proc_obs = process_eros(roi_u);
 
         projection.score = similarity_score(proc_obs, projection.img_warp);
-        projection.score = projection.score < 0 ? 0 : projection.score;
+        //projection.score = projection.score < 0 ? 0 : projection.score;
     }
 
     void compare_to_warp_x() 
     {
         cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -288,9 +288,9 @@ public:
     void compare_to_warp_y() 
     {
         cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
 
         // calculate the state change given interactive matrix
         // dx = du * d / fx
@@ -360,13 +360,13 @@ public:
                 state_current[best.axis] += best.delta *  d;
                 break;
             case(a):
-                perform_rotation(state_current, 2, best.delta);
+                perform_rotation(state_current, 0, best.delta);
                 break;
             case(b):
                 perform_rotation(state_current, 1, best.delta);
                 break;
             case(c):
-                perform_rotation(state_current, 0, best.delta);
+                perform_rotation(state_current, 2, best.delta);
                 break;
         }
 

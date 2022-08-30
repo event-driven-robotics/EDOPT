@@ -14,8 +14,8 @@ Superimpose::ModelPose quaternion_to_axisangle(const std::array<double, 7> &stat
     pose[2] = state[2]; //z
 
     //if acos return -nan it means the quaternion wasn't normalised !
-    pose[6] = 2 * acos(state[3]); //state[3] is w, pose[6] = angle
-    double scaler =  sqrt(1 - state[3]*state[3]);
+    pose[6] = 2 * acos(state[6]); //state[6] is w, pose[6] = angle
+    double scaler =  sqrt(1 - state[6]*state[6]);
     if(scaler < 0.001) { //angle is close to 0 so it is insignificant (but don't divide by 0)
         pose[6] = 0.0; //angle
         pose[3] = 1.0; //ax
