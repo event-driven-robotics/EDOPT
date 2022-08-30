@@ -121,7 +121,7 @@ public:
 
 
 
-        worker = std::threa intrinsics[1] = intrinsic_parameters.find("h").asInt32();d([this]{main_loop();});
+        worker = std::thread([this]{main_loop();});
 
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
