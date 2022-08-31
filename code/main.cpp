@@ -115,7 +115,7 @@ public:
         //quaternion_test();
         //quaternion_test_camera();
 
-        worker = std::thread([this]{main_loop();});
+        worker = std::thread([this]{sequential_loop();});
 
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
@@ -181,7 +181,72 @@ public:
         return true;
     }
 
-    void main_loop()
+    void projection_loop()
+    {
+        //pause the warp_loop() 
+
+        //warp the current projection based on the warp list
+
+        //clear the warp list
+
+        //set the current image
+
+        //get the current state
+
+        //unpause the warp_loop()
+
+        //project the current state
+        complexProjection(si_cad, camera_pose, state, proj_rgb);
+
+        //get the ROI of the current state
+        warp_handler.extract_rois(proj_rgb);
+
+        //process the projection
+        warp_handler.set_projection(state, proj_rgb);
+
+        
+
+
+
+
+
+    }
+
+    void warp_loop()
+    {
+
+        //get the current EROS
+        eros_handler.eros.getSurface().copyTo(eros_u);
+        warp_handler.set_observation(eros_u);
+
+        //make the next warps
+        //perform the comparison     
+        warp_handler.compare_to_warp_x();
+        warp_handler.compare_to_warp_y();
+        warp_handler.compare_to_warp_z();
+        warp_handler.compare_to_warp_a();
+        warp_handler.compare_to_warp_b();
+        warp_handler.compare_to_warp_c();
+
+        //update the state
+        if (step) {
+            // warp_handler.update_from_max();
+            // warp_handler.update_all_possible();
+            warp_handler.update_heuristically();
+            state = warp_handler.state_current;
+            step = true;
+        }
+
+        //push to the warp list
+
+        //yield to projection loop if needed.
+
+        
+
+
+    }
+
+    void sequential_loop()
     {
         double dataset_time = -1;
         warp_handler.set_current(state);
