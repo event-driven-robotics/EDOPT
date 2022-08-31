@@ -100,6 +100,8 @@ public:
 
         proc_obs = cv::Mat::zeros(proc_size, CV_32F);
         projection.img_warp = cv::Mat::zeros(proc_size, CV_32F);
+        projection.axis = -1;
+        projection.delta = 0;
         for(auto &warp : warps) {
             warp.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         }
@@ -136,11 +138,11 @@ public:
         //but that requires recomputing M for each different position in the image
         //for computation we are making this assumption. could be improved.
         warps[zp].axis = z;
-        warps[zp].delta =  dp / proc_size.width;
-        warps[zp].M = cv::getRotationMatrix2D(cen, 0, 1+dp/(proc_size.width));
+        warps[zp].delta = dp / proc_size.width;
+        warps[zp].M = cv::getRotationMatrix2D(cen, 0, 1-dp/(proc_size.width));
         warps[zn].axis = z;
         warps[zn].delta = -dp / proc_size.width;
-        warps[zn].M = cv::getRotationMatrix2D(cen, 0, 1-dp/(proc_size.width));
+        warps[zn].M = cv::getRotationMatrix2D(cen, 0, 1+dp/(proc_size.width));
         
         //roll we use the 3 point formula
         src[1].x = proc_size.width*0.75; src[1].y = proc_size.height*0.25;
@@ -150,8 +152,8 @@ public:
         {
             dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cam[fx] / cam[fy] * theta,
                                    (src[i].x - cen.x) * cam[fy] / cam[fx] * theta);
-            dst_p[i] = src[i] - dst_n[i];
-            dst_n[i] = src[i] + dst_n[i];
+            dst_p[i] = src[i] + dst_n[i];
+            dst_n[i] = src[i] - dst_n[i];
         }
         warps[cp].axis = c;
         warps[cp].delta = theta;
@@ -176,8 +178,8 @@ public:
         cv::convertMaps(bp_rmx, bp_rmy, warps[bp].rmx, warps[bp].rmy, CV_16SC2);
         cv::convertMaps(bn_rmx, bn_rmy, warps[bn].rmx, warps[bn].rmy, CV_16SC2);
         warps[bp].axis = b;
-        warps[bp].delta = -theta;
-        warps[bn].delta = theta;
+        warps[bp].delta = theta;
+        warps[bn].delta = -theta;
         warps[bn].axis = b;
 
         theta = atan2(dp, proc_size.height * 0.5);
@@ -295,8 +297,8 @@ public:
         // calculate the state change given interactive matrix
         // dx = du * d / fx
         // yInfo() << (8 * d /cp[fx]) *0.001;
-        warps[yp].delta = -scale * dp;
-        warps[yn].delta =  scale * dp;
+        warps[yp].delta =  scale * dp;
+        warps[yn].delta = -scale * dp;
 
         // state[0] += 1 * d / cp[fx];
         warps[yp].score = similarity_score(proc_obs, warps[yp].img_warp);
@@ -388,6 +390,54 @@ public:
                 best = &warp;
 
         update_state(*best);
+    }
+
+    void update_heuristically()
+    {
+        //best of x axis and roation around y (yaw)
+        warp_bundle *best;
+        best = &projection;
+        if (warps[xp].score > best->score)
+            best = &warps[xp];
+        if (warps[xn].score > best->score)
+            best = &warps[xn];
+        if (warps[bp].score > best->score)
+            best = &warps[bp];
+        if (warps[bn].score > best->score)
+            best = &warps[bn];
+        if(best->score > projection.score)
+            update_state(*best);
+
+        //best of y axis and rotation around x (pitch)
+        best = &projection;
+        if (warps[yp].score > best->score)
+            best = &warps[yp];
+        if (warps[yn].score > best->score)
+            best = &warps[yn];
+        if (warps[ap].score > best->score)
+            best = &warps[ap];
+        if (warps[an].score > best->score)
+            best = &warps[an];
+        if(best->score > projection.score)
+            update_state(*best);
+
+        //best of roll
+        best = &projection;
+        if (warps[cp].score > best->score)
+            best = &warps[cp];
+        if (warps[cn].score > best->score)
+            best = &warps[cn];
+        if(best->score > projection.score)
+            update_state(*best);
+
+        //best of z
+        best = &projection;
+        if (warps[zp].score > best->score)
+            best = &warps[zp];
+        if (warps[zn].score > best->score)
+            best = &warps[zn];
+        if(best->score > projection.score)
+            update_state(*best);
     }
 
     void score_overlay(double score, cv::Mat image)

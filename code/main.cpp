@@ -92,7 +92,7 @@ public:
         // }
 
         int rescale_size = 120;
-        int blur = rescale_size / 10;
+        int blur = rescale_size / 20;
         double dp =  1;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
         warp_handler.create_Ms(dp);
@@ -216,6 +216,7 @@ public:
             if(step) {
                 warp_handler.update_from_max();
                 //warp_handler.update_all_possible();
+                //warp_handler.update_heuristically();
                 state = warp_handler.state_current;
                 step = true;
             }
