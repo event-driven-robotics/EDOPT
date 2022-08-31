@@ -112,11 +112,8 @@ public:
         cv::resizeWindow("Rotations", img_size);
         cv::moveWindow("Rotations", 700, 540);
 
-        // quaternion_test(true);
-        // for(int i = 0; i < 10; i++)
-        //     quaternion_test(true);
-        //  return quaternion_test(false);
-        //return quaternion_test_camera(false);
+        //quaternion_test();
+        //quaternion_test_camera();
 
         worker = std::thread([this]{main_loop();});
 
@@ -237,68 +234,54 @@ public:
         }
     }
 
-    bool quaternion_test(bool return_value)
+    bool quaternion_test(bool return_value = true)
     {
         double delta = 0.01;
+        auto temp_state = initial_state;
 
         for(double th = 0.0; th > -M_PI_2; th-=delta)
         {
-            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+            if (!simpleProjection(si_cad, temp_state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return false;
             }
             cv::imshow("qtest", proj_rgb);
             cv::waitKey(1);
-            perform_rotation(state, 2, delta);
+            perform_rotation(temp_state, 2, delta);
         }
 
         for(double th = 0.0; th > -M_PI_2; th-=delta)
         {
-            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+            if (!simpleProjection(si_cad, temp_state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return false;
             }
             cv::imshow("qtest", proj_rgb);
             cv::waitKey(1);
-            perform_rotation(state, 1, delta);
+            perform_rotation(temp_state, 1, delta);
         }
 
         for(double th = 0.0; th > -M_PI_2; th-=delta)
         {
-            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+            if (!simpleProjection(si_cad, temp_state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return false;
             }
             cv::imshow("qtest", proj_rgb);
             cv::waitKey(1);
-            perform_rotation(state, 0, delta);
+            perform_rotation(temp_state, 0, delta);
         }
-        yInfo() <<"Done";
 
         return return_value;
     }
 
-    bool quaternion_test_camera(bool return_value)
+    bool quaternion_test_camera(bool return_value = true)
     {
-        //{0.071233000755310059, 0.02, 0.76664299011230469, 0.212599992752075,0.674399971961975,-0.674399971961975,0.212599992752075};
-        
-        std::array<double, 7> state = {0.071233000755310059, 0.02, 0.76664299011230469, 0.212599992752075,0.674399971961975,-0.674399971961975,0.212599992752075};
 
-        //{-0.7, 0.05, 0.87} 
-        std::array<double, 7> camera = {0, 0, 0, 1, 0, 0, 0};
-        perform_rotation(camera, 0, M_PI);
-        //perform_rotation(camera, 0, M_PI);
-        //perform_rotation(camera, 1, M_PI);
+        auto camera = camera_pose;
+        double delta = 0.01;
 
-        // perform_rotation(camera, 2, M_PI);
-        // perform_rotation(camera, 0, M_PI);
-        yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
-        double delta = 0.1;
-
-        yInfo() << "First Rotation";
+        //yInfo() << "First Rotation";
         for(double th = 0.0; th < 2*M_PI; th+=delta)
         {
             if (!complexProjection(si_cad, camera, state, proj_rgb)) {
@@ -306,13 +289,13 @@ public:
                 return false;
             }
             cv::imshow("qtest", proj_rgb);
-            if(cv::waitKey() == '\e') return false;
+            if(cv::waitKey(1) == '\e') return false;
             perform_rotation(camera, 2, delta);
-            yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
-            yInfo() << 2 << th;
+            // yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+            // yInfo() << 2 << th;
         }
 
-        yInfo() << "Second Rotation";
+        //yInfo() << "Second Rotation";
         for(double th = 0.0; th < 2*M_PI; th+=delta)
         {
             if (!complexProjection(si_cad, camera, state, proj_rgb)) {
@@ -320,13 +303,13 @@ public:
                 return false;
             }
             cv::imshow("qtest", proj_rgb);
-            if(cv::waitKey() == '\e') return false;
+            if(cv::waitKey(1) == '\e') return false;
             perform_rotation(camera, 1, delta);
-            yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
-            yInfo() << 1 << th;
+            // yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+            // yInfo() << 1 << th;
         }
 
-        yInfo() << "Third Rotation";
+        //yInfo() << "Third Rotation";
         for(double th = 0.0; th < 2*M_PI; th+=delta)
         {
             if (!complexProjection(si_cad, camera, state, proj_rgb)) {
@@ -334,12 +317,12 @@ public:
                 return false;
             }
             cv::imshow("qtest", proj_rgb);
-            if(cv::waitKey() == '\e') return false;
+            if(cv::waitKey(1) == '\e') return false;
             perform_rotation(camera, 0, delta);
-            yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
-            yInfo() << 0 << th;
+            // yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
+            // yInfo() << 0 << th;
         }
-        yInfo()<< "Done";
+        //yInfo()<< "Done";
 
         return return_value;
     }

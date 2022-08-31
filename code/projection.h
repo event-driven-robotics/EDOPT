@@ -76,40 +76,17 @@ bool complexProjection(SICAD *si_cad, const std::array<double, 7> &camera, const
 
 }
 
-bool cameraBasedProjection(SICAD *si_cad, Superimpose::ModelPose pose, cv::Mat &image) {
-
-    Superimpose::ModelPoseContainer objpose_map;
-
-    std::vector<double> cam_pos(pose.begin(), pose.begin()+3);
-    std::vector<double> cam_rot(pose.begin()+3, pose.end());
-    static std::vector<double> origin = {0, 0, 0, 1, 0, 0, 0};
-    objpose_map.emplace("model", origin);
-
-    return si_cad->superimpose(objpose_map, cam_pos.data(), cam_rot.data(), image);
-
+bool cameraBasedProjection(SICAD *si_cad, const std::array<double, 7> &camera, cv::Mat &image) 
+{
+    static std::array<double, 7> objectatorigin = {0, 0, 0, 1, 0, 0, 0};
+    return complexProjection(si_cad, camera, objectatorigin, image);
 }
 
 
-bool simpleProjection(SICAD *si_cad, Superimpose::ModelPose pose, cv::Mat &image) {
-
-    Superimpose::ModelPoseContainer objpose_map;
-    objpose_map.emplace("model", pose);
-
-    static std::vector<double> cam_pos = {0, 0, 0};
-    static std::vector<double> cam_rot = {1, 0, 0, 0}; //{0 0 0 0} is invalid
-
-    return si_cad->superimpose(objpose_map, cam_pos.data(), cam_rot.data(), image);
-
-}
-
-bool simpleProjection(SICAD *si_cad, std::vector<SICAD::ModelPoseContainer>& objpos_multimap,
-                      cv::Mat &image) {
-
-    std::vector<double> cam_pos = {0, 0, 0};
-    std::vector<double> cam_rot = {1, 0, 0, 0}; //{0 0 0 0} is invalid
-
-    return si_cad->superimpose(objpos_multimap, cam_pos.data(), cam_rot.data(), image);
-
+bool simpleProjection(SICAD *si_cad, const std::array<double, 7> &object, cv::Mat &image) 
+{
+    static std::array<double, 7> cameraatorigin = {0, 0, 0, 1, 0, 0, 0};
+    return complexProjection(si_cad, cameraatorigin, object, image);
 }
 
 bool loadPose(yarp::os::ResourceFinder &config, const std::string pose_name, std::array<double, 7> &pose)
