@@ -308,9 +308,9 @@ public:
     void compare_to_warp_z() 
     {
         cv::warpAffine(projection.img_warp, warps[zp].img_warp, warps[zp].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[zn].img_warp, warps[zn].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
         
         warps[zp].score = similarity_score(proc_obs, warps[zp].img_warp);
         warps[zn].score = similarity_score(proc_obs, warps[zn].img_warp);
@@ -320,9 +320,9 @@ public:
     {
         //roll
         cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
         cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
-            proc_size, cv::INTER_CUBIC, cv::BORDER_REPLICATE);
+            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
         warps[cp].score = similarity_score(proc_obs, warps[cp].img_warp);
         warps[cn].score = similarity_score(proc_obs, warps[cn].img_warp);
@@ -331,8 +331,8 @@ public:
     void compare_to_warp_b() 
     {
         //yaw
-        cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_CUBIC);
-        cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_CUBIC);
+        cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
+        cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
 
         warps[bp].score = similarity_score(proc_obs, warps[bp].img_warp);
         warps[bn].score = similarity_score(proc_obs, warps[bn].img_warp);
@@ -341,8 +341,8 @@ public:
     void compare_to_warp_a() 
     {
         //pitch
-        cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_CUBIC);
-        cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_CUBIC);
+        cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
+        cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
 
         warps[ap].score = similarity_score(proc_obs, warps[ap].img_warp);
         warps[an].score = similarity_score(proc_obs, warps[an].img_warp);

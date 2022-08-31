@@ -91,7 +91,7 @@ public:
         //     return false;
         // }
 
-        int rescale_size = 120;
+        int rescale_size = 100;
         int blur = rescale_size / 20;
         double dp =  1;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
@@ -214,9 +214,9 @@ public:
             warp_handler.compare_to_warp_c();
             
             if(step) {
-                warp_handler.update_from_max();
+                //warp_handler.update_from_max();
                 //warp_handler.update_all_possible();
-                //warp_handler.update_heuristically();
+                warp_handler.update_heuristically();
                 state = warp_handler.state_current;
                 step = true;
             }

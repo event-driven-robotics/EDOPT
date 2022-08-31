@@ -112,19 +112,6 @@ bool loadPose(yarp::os::ResourceFinder &config, const std::string pose_name, std
 }
 
 
-void normalise_quaternion(std::vector<double> &state)
-{
-
-    double normval = 1.0 / sqrt(state[3]*state[3] + state[4]*state[4] +
-                                state[5]*state[5] + state[6]*state[6]);
-    state[3] *= normval;
-    state[4] *= normval;
-    state[5] *= normval;
-    state[6] *= normval;
-}
-
-
-
 Superimpose::ModelPose euler_to_axisangle(const std::vector<double> &state)
 {
     static constexpr double halfdeg2rad = 0.5 * 2.0 * M_PI / 180.0;
@@ -158,9 +145,6 @@ Superimpose::ModelPose euler_to_axisangle(const std::vector<double> &state)
         pose[5] /= norm;
         pose[6] = 2.0 * acos(c1*c2*c3 - s1*s2*s3);
     }
-
-
-
     return pose;
 }
 
