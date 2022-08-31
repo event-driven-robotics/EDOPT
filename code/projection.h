@@ -64,13 +64,13 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
 
 }
 
-bool complexProjection(SICAD *si_cad, std::array<double, 7> camera, Superimpose::ModelPose object, cv::Mat &image) {
+bool complexProjection(SICAD *si_cad, const std::array<double, 7> &camera, const std::array<double, 7> &object, cv::Mat &image) {
 
     Superimpose::ModelPoseContainer objpose_map;
 
+    Superimpose::ModelPose op = quaternion_to_axisangle(object);
     Superimpose::ModelPose cp = quaternion_to_axisangle(camera);
-    objpose_map.emplace("model", object);
-
+    objpose_map.emplace("model", op);
 
     return si_cad->superimpose(objpose_map, &(cp[0]), &(cp[3]), image);
 
@@ -112,16 +112,23 @@ bool simpleProjection(SICAD *si_cad, std::vector<SICAD::ModelPoseContainer>& obj
 
 }
 
-bool loadObjectPose(yarp::os::ResourceFinder &config, Superimpose::ModelPose &obj_pose,
-                    std::string object_pose_name)
+bool loadPose(yarp::os::ResourceFinder &config, const std::string pose_name, std::array<double, 7> &pose)
 {
-    yarp::os::Bottle *loaded_pose = config.find(object_pose_name).asList();
-    if(!loaded_pose)
+    yarp::os::Bottle *loaded_pose = config.find(pose_name).asList();
+    if(!loaded_pose) {
+        yError() << "Could not find pose name";
         return false;
+    }
 
-    obj_pose.clear();
-    for(size_t i = 0; i < loaded_pose->size(); i++)
-        obj_pose.push_back(loaded_pose->get(i).asFloat32());
+    yInfo() << pose_name << loaded_pose->toString();
+
+    if(loaded_pose->size() != pose.size()) {
+        yError() << "Pose incorrect size: " << loaded_pose->size();
+        return false;
+    }
+
+    for(size_t i = 0; i < pose.size(); i++)
+        pose[i] = loaded_pose->get(i).asFloat32();
 
     return true;
 

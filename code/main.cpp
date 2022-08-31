@@ -26,9 +26,7 @@ private:
     std::array<double, 6> intrinsics;
 
     //std::array<double, 7> default_state = {0, 0, 0.92, 0, 0, 0.7071068, 0.7071068};
-    std::array<double, 7> default_camera = {0, 0, 0, 1, 0, 0, 0};
-    std::array<double, 7> default_state = {0, 0, -300, -1, 0, 0, 0};
-    std::array<double, 7> state;
+    std::array<double, 7> initial_state, camera_pose, state;
     std::deque< std::array<double, 8> > data_to_save;
 
     SICAD* si_cad;
@@ -63,7 +61,9 @@ public:
         intrinsics[4] = intrinsic_parameters.find("fx").asFloat32();
         intrinsics[5] = intrinsic_parameters.find("fy").asFloat32();
 
-        state = default_state;
+        if(!loadPose(rf, "object_pose", initial_state)) return false;
+        if(!loadPose(rf, "camera_pose", camera_pose)) return false;
+        state = initial_state;
         img_size = cv::Size(intrinsics[0], intrinsics[1]);
 
         if(!Network::checkNetwork(1.0)) {
@@ -91,9 +91,9 @@ public:
         //     return false;
         // }
 
-        int rescale_size = 200;
-        int blur = rescale_size / 20;
-        double dp =  2;//+rescale_size / 100;
+        int rescale_size = 120;
+        int blur = rescale_size / 10;
+        double dp =  1;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
         warp_handler.create_Ms(dp);
 
@@ -117,8 +117,6 @@ public:
         //     quaternion_test(true);
         //  return quaternion_test(false);
         //return quaternion_test_camera(false);
-
-
 
         worker = std::thread([this]{main_loop();});
 
@@ -155,7 +153,7 @@ public:
         cv::imshow("Rotations", warps_r+0.5);
         int c = cv::waitKey(1);
         if (c == 32)
-            warp_handler.set_current(default_state);
+            warp_handler.set_current(initial_state);
         if (c == 'g')
             step = true;
         if(c == 27) {
@@ -190,16 +188,12 @@ public:
     {
         double dataset_time = -1;
         warp_handler.set_current(state);
-        auto camera = default_camera;
-        //perform_rotation(camera, 0, M_PI);
-        for(auto i : camera)
-            yInfo() << i;
+
         while (!isStopping()) {
 
             double dtic = Time::now();
 
-            Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-            if (!simpleProjection(si_cad, pose, proj_rgb)) {
+            if (!complexProjection(si_cad, camera_pose, state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return;
             }
@@ -223,8 +217,8 @@ public:
             warp_handler.compare_to_warp_c();
             
             if(step) {
-                //warp_handler.update_from_max();
-                warp_handler.update_all_possible();
+                warp_handler.update_from_max();
+                //warp_handler.update_all_possible();
                 state = warp_handler.state_current;
                 step = true;
             }
@@ -299,11 +293,6 @@ public:
         //perform_rotation(camera, 0, M_PI);
         //perform_rotation(camera, 1, M_PI);
 
-
-
-        Superimpose::ModelPose pose = quaternion_to_axisangle(state);
-        for(auto i =0; i < pose.size(); i++) 
-            yInfo() << pose[i];
         // perform_rotation(camera, 2, M_PI);
         // perform_rotation(camera, 0, M_PI);
         yInfo() << camera[3] << camera[4] << camera[5] << camera[6];
@@ -312,7 +301,7 @@ public:
         yInfo() << "First Rotation";
         for(double th = 0.0; th < 2*M_PI; th+=delta)
         {
-            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+            if (!complexProjection(si_cad, camera, state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return false;
             }
@@ -326,7 +315,7 @@ public:
         yInfo() << "Second Rotation";
         for(double th = 0.0; th < 2*M_PI; th+=delta)
         {
-            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+            if (!complexProjection(si_cad, camera, state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return false;
             }
@@ -340,7 +329,7 @@ public:
         yInfo() << "Third Rotation";
         for(double th = 0.0; th < 2*M_PI; th+=delta)
         {
-            if (!complexProjection(si_cad, camera, pose, proj_rgb)) {
+            if (!complexProjection(si_cad, camera, state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return false;
             }
@@ -355,9 +344,12 @@ public:
         return return_value;
     }
 
-    // bool interruptModule() override
-    // {
-    // }
+    bool interruptModule() override
+    {
+        yInfo() << "interrupt caught";
+        return true;
+    }
+
     bool close() override
     {
         yInfo() << "waiting for eros handler ... ";
@@ -382,7 +374,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
-    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/config.ini");
+    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configCAR.ini");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);

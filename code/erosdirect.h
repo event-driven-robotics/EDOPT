@@ -111,6 +111,11 @@ public:
         eros_worker.join();
     }
 
+    ~EROSfromYARP() 
+    {
+        stop();
+    }
+
 
 
 };
