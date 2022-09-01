@@ -140,14 +140,18 @@ public:
         //x is a shift
         warps[xp].axis = x;
         warps[xp].M = (cv::Mat_<double>(2, 3) << 1, 0, dp, 0, 1, 0);
+        warps[xp].delta = dp;
         warps[xn].axis = x;
         warps[xn].M = (cv::Mat_<double>(2, 3) << 1, 0, -dp, 0, 1, 0);
+        warps[xn].delta = -dp;
 
         //y is a shift
         warps[yp].axis = y;
         warps[yp].M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, dp);
+        warps[yp].delta = dp;
         warps[yn].axis = y;
         warps[yn].M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, -dp);
+        warps[yn].delta = -dp;
 
         //z we use a scaling matrix
         //this should have the centre in the image centre (not object centre)
@@ -292,24 +296,20 @@ public:
         if (warps[xp].active) {
             cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
                            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-            warps[xp].delta = scale * dp;
         }
         if (warps[xn].active) {
             cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
                            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-            warps[xn].delta = -scale * dp;
         }
 
         // Y
         if (warps[yp].active) {
             cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
                            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-            warps[yp].delta = scale * dp;
         }
         if (warps[yn].active) {
             cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
                            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-            warps[yn].delta = -scale * dp;
         }
 
         // Z
@@ -349,65 +349,6 @@ public:
         }
     }
 
-    // void compare_to_warp_x() 
-    // {
-    //     cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
-    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-    //     cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
-    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-
-    //     // calculate the state change given interactive matrix
-    //     // dx = du * d / fx
-    //     //yInfo() << (8 * d /cp[fx]) *0.001;
-    //     warps[xp].delta =  scale * dp;
-    //     warps[xn].delta = -scale * dp;
-    // }
-
-    // void compare_to_warp_y() 
-    // {
-    //     cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
-    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-    //     cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
-    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-
-    //     // calculate the state change given interactive matrix
-    //     // dx = du * d / fx
-    //     // yInfo() << (8 * d /cp[fx]) *0.001;
-    //     warps[yp].delta =  scale * dp;
-    //     warps[yn].delta = -scale * dp;
-    // }
-
-    // void compare_to_warp_z() 
-    // {
-    //     cv::warpAffine(projection.img_warp, warps[zp].img_warp, warps[zp].M,
-    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-    //     cv::warpAffine(projection.img_warp, warps[zn].img_warp, warps[zn].M,
-    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-    // }
-
-    // void compare_to_warp_c() 
-    // {
-    //     //roll
-    //     cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
-    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-    //     cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
-    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-    // }
-
-    // void compare_to_warp_b() 
-    // {
-    //     //yaw
-    //     cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
-    //     cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
-    // }
-
-    // void compare_to_warp_a() 
-    // {
-    //     //pitch
-    //     cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
-    //     cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
-    // }
-
     void score()
     {
         for(auto &w : warps)
@@ -419,10 +360,10 @@ public:
         double d = fabs(state_current[z]);
         switch(best.axis) {
             case(x):
-                state_current[best.axis] += best.delta * d / cam[fx];
+                state_current[best.axis] += best.delta * scale * d / cam[fx];
                 break;
             case(y):
-                state_current[best.axis] += best.delta * d / cam[fy];
+                state_current[best.axis] += best.delta * scale * d / cam[fy];
                 break;
             case(z):
                 state_current[best.axis] += best.delta *  d;
