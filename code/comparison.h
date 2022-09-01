@@ -46,10 +46,13 @@ public:
         int axis{0};
         double delta{0.0};
         double score{-DBL_MAX};
+        bool active{false};
+        warp_name name;
     } warp_bundle;
 
     warp_bundle projection;
     std::array<warp_bundle, 12> warps;
+    std::deque<warp_name> warp_history;
 
     cv::Mat process_projected(const cv::Mat &projected, int blur = 10) {
         static cv::Mat canny_img, f, pos_hat, neg_hat;
@@ -108,6 +111,19 @@ public:
 
         img_roi = cv::Rect(0, 0, cam[w], cam[h]); //this gets updated with every projection
         proc_roi = cv::Rect(0, 0, proc_size.width, proc_size.height); //this gets updated with every projection
+
+        warps[xp].active = warps[xn].active = true; 
+        warps[yp].active = warps[yn].active = true; 
+        warps[zp].active = warps[zn].active = true; 
+        warps[ap].active = warps[an].active = true; 
+        warps[bp].active = warps[bn].active = true; 
+        warps[cp].active = warps[cn].active = true;
+        warps[xp].name = xp; warps[xn].name = xn;
+        warps[yp].name = yp; warps[yn].name = yn;
+        warps[zp].name = zp; warps[zn].name = zn;
+        warps[ap].name = ap; warps[an].name = an;
+        warps[bp].name = bp; warps[bn].name = bn;
+        warps[cp].name = cp; warps[cn].name = cn;
     }
 
     void create_Ms(double dp)
@@ -270,82 +286,132 @@ public:
         //projection.score = projection.score < 0 ? 0 : projection.score;
     }
 
-    void compare_to_warp_x() 
+    void warp()
     {
-        cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-        cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+        // X
+        if (warps[xp].active) {
+            cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
+                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            warps[xp].delta = scale * dp;
+        }
+        if (warps[xn].active) {
+            cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
+                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            warps[xn].delta = -scale * dp;
+        }
 
-        // calculate the state change given interactive matrix
-        // dx = du * d / fx
-        //yInfo() << (8 * d /cp[fx]) *0.001;
-        warps[xp].delta =  scale * dp;
-        warps[xn].delta = -scale * dp;
+        // Y
+        if (warps[yp].active) {
+            cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
+                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            warps[yp].delta = scale * dp;
+        }
+        if (warps[yn].active) {
+            cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
+                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            warps[yn].delta = -scale * dp;
+        }
 
-        warps[xp].score = similarity_score(proc_obs, warps[xp].img_warp);
-        warps[xn].score = similarity_score(proc_obs, warps[xn].img_warp);
+        // Z
+        if (warps[zp].active) {
+            cv::warpAffine(projection.img_warp, warps[zp].img_warp, warps[zp].M,
+                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        }
+        if (warps[zn].active) {
+            cv::warpAffine(projection.img_warp, warps[zn].img_warp, warps[zn].M,
+                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        }
+
+        // A
+        if (warps[ap].active) {
+            cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
+        }
+        if (warps[an].active) {
+            cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
+        }
+
+        // B
+        if (warps[bp].active) {
+            cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
+        }
+        if (warps[bn].active) {
+            cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
+        }
+
+        // C
+        if (warps[cp].active) {
+            cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
+                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        }
+        if (warps[cn].active) {
+            cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
+                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+        }
     }
 
-    void compare_to_warp_y() 
+    // void compare_to_warp_x() 
+    // {
+    //     cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
+    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+    //     cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
+    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+
+    //     // calculate the state change given interactive matrix
+    //     // dx = du * d / fx
+    //     //yInfo() << (8 * d /cp[fx]) *0.001;
+    //     warps[xp].delta =  scale * dp;
+    //     warps[xn].delta = -scale * dp;
+    // }
+
+    // void compare_to_warp_y() 
+    // {
+    //     cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
+    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+    //     cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
+    //         proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+
+    //     // calculate the state change given interactive matrix
+    //     // dx = du * d / fx
+    //     // yInfo() << (8 * d /cp[fx]) *0.001;
+    //     warps[yp].delta =  scale * dp;
+    //     warps[yn].delta = -scale * dp;
+    // }
+
+    // void compare_to_warp_z() 
+    // {
+    //     cv::warpAffine(projection.img_warp, warps[zp].img_warp, warps[zp].M,
+    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+    //     cv::warpAffine(projection.img_warp, warps[zn].img_warp, warps[zn].M,
+    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+    // }
+
+    // void compare_to_warp_c() 
+    // {
+    //     //roll
+    //     cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
+    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+    //     cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
+    //         proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+    // }
+
+    // void compare_to_warp_b() 
+    // {
+    //     //yaw
+    //     cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
+    //     cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
+    // }
+
+    // void compare_to_warp_a() 
+    // {
+    //     //pitch
+    //     cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
+    //     cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
+    // }
+
+    void score()
     {
-        cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-        cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
-            proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
-
-        // calculate the state change given interactive matrix
-        // dx = du * d / fx
-        // yInfo() << (8 * d /cp[fx]) *0.001;
-        warps[yp].delta =  scale * dp;
-        warps[yn].delta = -scale * dp;
-
-        // state[0] += 1 * d / cp[fx];
-        warps[yp].score = similarity_score(proc_obs, warps[yp].img_warp);
-        warps[yn].score = similarity_score(proc_obs, warps[yn].img_warp);
-    }
-
-    void compare_to_warp_z() 
-    {
-        cv::warpAffine(projection.img_warp, warps[zp].img_warp, warps[zp].M,
-            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-        cv::warpAffine(projection.img_warp, warps[zn].img_warp, warps[zn].M,
-            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-        
-        warps[zp].score = similarity_score(proc_obs, warps[zp].img_warp);
-        warps[zn].score = similarity_score(proc_obs, warps[zn].img_warp);
-    }
-
-    void compare_to_warp_c() 
-    {
-        //roll
-        cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
-            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-        cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
-            proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-
-        warps[cp].score = similarity_score(proc_obs, warps[cp].img_warp);
-        warps[cn].score = similarity_score(proc_obs, warps[cn].img_warp);
-    }
-
-    void compare_to_warp_b() 
-    {
-        //yaw
-        cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
-        cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
-
-        warps[bp].score = similarity_score(proc_obs, warps[bp].img_warp);
-        warps[bn].score = similarity_score(proc_obs, warps[bn].img_warp);
-    }
-
-    void compare_to_warp_a() 
-    {
-        //pitch
-        cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
-        cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
-
-        warps[ap].score = similarity_score(proc_obs, warps[ap].img_warp);
-        warps[an].score = similarity_score(proc_obs, warps[an].img_warp);
+        for(auto &w : warps)
+            if(w.active) w.score = similarity_score(proc_obs, w.img_warp);
     }
 
     void update_state(const warp_bundle &best)
@@ -371,6 +437,7 @@ public:
                 perform_rotation(state_current, 2, best.delta);
                 break;
         }
+        warp_history.push_back(best.name);
 
 
     }

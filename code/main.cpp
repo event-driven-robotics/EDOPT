@@ -71,7 +71,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEd:i"))) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEg:i"))) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -214,19 +214,15 @@ public:
 
     void warp_loop()
     {
+        //perform warps
+        warp_handler.warp();
 
         //get the current EROS
         eros_handler.eros.getSurface().copyTo(eros_u);
         warp_handler.set_observation(eros_u);
 
-        //make the next warps
-        //perform the comparison     
-        warp_handler.compare_to_warp_x();
-        warp_handler.compare_to_warp_y();
-        warp_handler.compare_to_warp_z();
-        warp_handler.compare_to_warp_a();
-        warp_handler.compare_to_warp_b();
-        warp_handler.compare_to_warp_c();
+        //perform the comparison
+        warp_handler.score();
 
         //update the state
         if (step) {
@@ -270,13 +266,16 @@ public:
             dataset_time = eros_handler.tic;
             warp_handler.set_observation(eros_u);
             double dtoc_eros = Time::now();
+
+            warp_handler.warp();
+            warp_handler.score();
             
-            warp_handler.compare_to_warp_x();
-            warp_handler.compare_to_warp_y();
-            warp_handler.compare_to_warp_z();
-            warp_handler.compare_to_warp_a();
-            warp_handler.compare_to_warp_b();
-            warp_handler.compare_to_warp_c();
+            // warp_handler.compare_to_warp_x();
+            // warp_handler.compare_to_warp_y();
+            // warp_handler.compare_to_warp_z();
+            // warp_handler.compare_to_warp_a();
+            // warp_handler.compare_to_warp_b();
+            // warp_handler.compare_to_warp_c();
             
             if(step) {
                 //warp_handler.update_from_max();
