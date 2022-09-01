@@ -191,23 +191,26 @@ public:
 
     void projection_loop()
     {
-        //pause the warp_loop() 
+        //safe section
+        {
+            // pause the warp_loop()
 
-        //set the current image
-        warp_handler.projection.img_warp = img_handler.proc_proj;
+            // set the current image
+            img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
 
-        //warp the current projection based on the warp list
-        // and clear the list
-        warp_handler.warp_by_history(warp_handler.projection.img_warp);
+            // warp the current projection based on the warp list
+            //  and clear the list
+            warp_handler.warp_by_history(warp_handler.projection.img_warp);
 
-        //copy over the region of interest
-        img_handler.set_obs_rois_from_projected();
-        warp_handler.scale = img_handler.scale;
+            // copy over the region of interest (needs to be thread safe)
+            img_handler.set_obs_rois_from_projected();
+            warp_handler.scale = img_handler.scale;
 
-        //set the current state
-        state = warp_handler.state_current;
+            // extract the current state for the next projection
+            state = warp_handler.state_current;
 
-        //unpause the warp_loop()
+            // unpause the warp_loop()
+        }
 
         //project the current state
         complexProjection(si_cad, camera_pose, state, proj_rgb);
@@ -228,6 +231,7 @@ public:
         //get the current EROS
         eros_handler.eros.getSurface().copyTo(eros_u);
         img_handler.setProcObs(eros_u);
+        warp_handler.proc_obs = img_handler.proc_obs;
 
         //perform the comparison
         warp_handler.score_predictive_warps();
@@ -241,10 +245,9 @@ public:
             step = true;
         }
 
+        //update the projection warp image based on the update
+
         //yield to projection loop if needed.
-
-        
-
 
     }
 

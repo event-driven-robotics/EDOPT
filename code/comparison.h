@@ -253,6 +253,7 @@ public:
                 perform_rotation(state_current, 2, best.delta);
                 break;
         }
+        cv::remap(projection.img_warp, projection.img_warp, best.rmp, best.rmsp, cv::INTER_LINEAR);
         warp_history.push_back(&best);
     }
 
@@ -421,29 +422,4 @@ public:
 
     }
 
-    // cv::Mat make_visualisation(cv::Mat full_obs) {
-    //     cv::Mat rgb_img, temp, temp8;
-    //     std::vector<cv::Mat> channels;
-    //     channels.resize(3);
-    //     channels[0] = cv::Mat::zeros(full_obs.size(), CV_8U);
-    //     //channels[1] = cv::Mat::zeros(full_obs.size(), CV_8U);
-    //     channels[2] = cv::Mat::zeros(full_obs.size(), CV_8U);
-    //     // green = events
-    //     full_obs.copyTo(channels[1]);
-    //     cv::Rect roi = img_roi;
-
-    //     // blue = positive space
-    //     cv::threshold(projection.img_warp(proc_roi), temp, 0.0, 0.5, cv::THRESH_TOZERO);
-    //     cv::resize(temp, temp, roi.size());
-    //     temp.convertTo(channels[0](roi), CV_8U, 1024);
-    //     // red = negative space
-    //     temp = projection.img_warp(proc_roi) * -1.0;
-    //     cv::threshold(temp, temp, 0.0, 0.5, cv::THRESH_TOZERO);
-    //     cv::resize(temp, temp, roi.size());
-    //     temp.convertTo(channels[2](roi), CV_8U, 1024);
-
-    //     cv::merge(channels, rgb_img);
-
-    //     return rgb_img;
-    // }
 };
