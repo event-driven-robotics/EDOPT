@@ -172,23 +172,27 @@ public:
         warps[yp].axis = y; warps[yn].axis = y;
         warps[yp].delta = dp; warps[yn].delta = -dp;
 
-        static std::array<cv::Point2f, 3> dst_n, dst_p;
-        static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
-        src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
-        src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
-
-        cv::Point cen = cv::Point(proc_size.width * 0.5, proc_size.height*0.5);
-
         //z we use a scaling matrix
         //this should have the centre in the image centre (not object centre)
         //but that requires recomputing M for each different position in the image
         //for computation we are making this assumption. could be improved.
-        warps[zp].axis = z;
-        warps[zp].delta = dp / proc_size.width;
-        warps[zp].M = cv::getRotationMatrix2D(cen, 0, 1-dp/(proc_size.width));
-        warps[zn].axis = z;
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                double dx = -(x-cx) * dp / proc_size.width;
+                double dy = -(y-cy) * dp / proc_size.height;
+                //positive
+                prmx.at<float>(y, x) = x - dx;
+                prmy.at<float>(y, x) = y - dy;
+                //negative
+                nrmx.at<float>(y, x) = x + dx;
+                nrmy.at<float>(y, x) = y + dy;
+            }
+        }
+        cv::convertMaps(prmx, prmy, warps[zp].rmp, warps[zp].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[zn].rmp, warps[zn].rmsp, CV_16SC2);
+        warps[zp].axis = z; warps[zn].axis = z;
+        warps[zp].delta = dp / proc_size.width; 
         warps[zn].delta = -dp / proc_size.width;
-        warps[zn].M = cv::getRotationMatrix2D(cen, 0, 1+dp/(proc_size.width));
         
         //roll by 2 pixels at proc_width/2 distance
         theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);
@@ -334,12 +338,10 @@ public:
 
         // Z
         if (warps[zp].active) {
-            cv::warpAffine(projection.img_warp, warps[zp].img_warp, warps[zp].M,
-                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[zp].img_warp, warps[zp].rmp, warps[zp].rmsp,cv::INTER_LINEAR);
         }
         if (warps[zn].active) {
-            cv::warpAffine(projection.img_warp, warps[zn].img_warp, warps[zn].M,
-                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[zn].img_warp, warps[zn].rmp, warps[zn].rmsp,cv::INTER_LINEAR);
         }
 
         // A
