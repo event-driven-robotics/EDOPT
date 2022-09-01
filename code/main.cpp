@@ -9,6 +9,7 @@ using namespace yarp::os;
 #include "erosdirect.h"
 #include "projection.h"
 #include "comparison.h"
+#include "image_processing.h"
 
 
 
@@ -19,6 +20,8 @@ private:
     std::thread worker;
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
+
+    imageProcessing img_handler;
 
     cv::Size img_size;
 
@@ -71,7 +74,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEg:i"))) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:fi"))) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -91,11 +94,15 @@ public:
         //     return false;
         // }
 
+        
+
         int rescale_size = 100;
         int blur = rescale_size / 20;
         double dp =  1;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
         warp_handler.create_Ms(dp);
+
+        img_handler.initialise(rescale_size, blur);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", img_size);
@@ -186,13 +193,18 @@ public:
     {
         //pause the warp_loop() 
 
+        //set the current image
+        warp_handler.projection.img_warp = img_handler.proc_proj;
+
         //warp the current projection based on the warp list
         // and clear the list
-        warp_handler.warp_by_history(proj_32f);
+        warp_handler.warp_by_history(warp_handler.projection.img_warp);
 
-        //set the current image
-        warp_handler.set_projection(proj_32f);
+        //copy over the region of interest
+        img_handler.set_obs_rois_from_projected();
+        warp_handler.scale = img_handler.scale;
 
+        //set the current state
         state = warp_handler.state_current;
 
         //unpause the warp_loop()
@@ -201,18 +213,11 @@ public:
         complexProjection(si_cad, camera_pose, state, proj_rgb);
 
         //get the ROI of the current state
-        warp_handler.extract_rois(proj_rgb);
-
+        img_handler.set_projection_rois(proj_rgb);
         //process the projection
-        proj_32f = warp_handler.extract_projection(proj_rgb);
-        
+        img_handler.setProcProj(proj_rgb);
 
         
-
-
-
-
-
     }
 
     void warp_loop()
@@ -222,7 +227,7 @@ public:
 
         //get the current EROS
         eros_handler.eros.getSurface().copyTo(eros_u);
-        warp_handler.set_observation(eros_u);
+        img_handler.setProcObs(eros_u);
 
         //perform the comparison
         warp_handler.score_predictive_warps();
@@ -257,17 +262,24 @@ public:
                 return;
             }
 
-            warp_handler.extract_rois(proj_rgb);
+            img_handler.set_projection_rois(proj_rgb);
+            img_handler.set_obs_rois_from_projected();
+            warp_handler.scale = img_handler.scale;
+            //warp_handler.extract_rois(proj_rgb);
             double dtoc_proj = Time::now();
             
-            proj_32f = warp_handler.extract_projection(proj_rgb);
-            warp_handler.set_projection(proj_32f);
+            img_handler.setProcProj(proj_rgb);
+            //proj_32f = warp_handler.extract_projection(proj_rgb);
+            //warp_handler.set_projection(proj_32f);
+            warp_handler.projection.img_warp = img_handler.proc_proj;
             warp_handler.make_predictive_warps();
             double dtoc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
             dataset_time = eros_handler.tic;
-            warp_handler.set_observation(eros_u);
+            img_handler.setProcObs(eros_u);
+            warp_handler.proc_obs = img_handler.proc_obs;
+            //warp_handler.set_observation(eros_u);
             double dtoc_eros = Time::now();
 
             warp_handler.score_predictive_warps();

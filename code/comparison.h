@@ -21,12 +21,9 @@ public:
     std::array<double, 6> cam;
     enum cam_param_name{w,h,cx,cy,fx,fy};
     double dp{2};
-    double blur{10};
 
     //size/resize parameters
     cv::Size proc_size{cv::Size(100, 100)};
-    cv::Rect img_roi; //roi on the image
-    cv::Rect proc_roi;
     double scale{1.0};
     cv::Mat proc_obs;
     double d;
@@ -46,7 +43,6 @@ public:
         double delta{0.0};
         double score{-DBL_MAX};
         bool active{false};
-        warp_name name;
     } warp_bundle;
 
     warp_bundle projection;
@@ -98,7 +94,6 @@ public:
     {
         cam = intrinsics;
         proc_size = size_to_process;
-        this->blur = blur;
 
         proc_obs = cv::Mat::zeros(proc_size, CV_32F);
         projection.img_warp = cv::Mat::zeros(proc_size, CV_32F);
@@ -108,21 +103,12 @@ public:
             warp.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         }
 
-        img_roi = cv::Rect(0, 0, cam[w], cam[h]); //this gets updated with every projection
-        proc_roi = cv::Rect(0, 0, proc_size.width, proc_size.height); //this gets updated with every projection
-
         warps[xp].active = warps[xn].active = true; 
         warps[yp].active = warps[yn].active = true; 
         warps[zp].active = warps[zn].active = true; 
         warps[ap].active = warps[an].active = true; 
         warps[bp].active = warps[bn].active = true; 
         warps[cp].active = warps[cn].active = true;
-        warps[xp].name = xp; warps[xn].name = xn;
-        warps[yp].name = yp; warps[yn].name = yn;
-        warps[zp].name = zp; warps[zn].name = zn;
-        warps[ap].name = ap; warps[an].name = an;
-        warps[bp].name = bp; warps[bn].name = bn;
-        warps[cp].name = cp; warps[cn].name = cn;
     }
 
     void create_Ms(double dp)
@@ -250,75 +236,9 @@ public:
         warps[ap].delta = theta; warps[an].delta = -theta;
     }
 
-    void extract_rois(const cv::Mat &projected)
-    {
-        int buffer = 20;
-        static cv::Rect full_roi = cv::Rect(cv::Point(0, 0), projected.size());
-        
-        //convert to grey
-        static cv::Mat grey;
-        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
-        
-        //find the bounding rectangle and add some buffer
-        img_roi = cv::boundingRect(grey);
-        img_roi.x -= buffer; img_roi.y-= buffer;
-        img_roi.width += buffer*2; img_roi.height += buffer*2;
-
-        //limit the roi to the image space.        
-        img_roi = img_roi & full_roi;
-
-        //find the process rois and the scale factor
-        if(img_roi.width >= img_roi.height) {
-            proc_roi.width = proc_size.width;
-            proc_roi.x = 0;
-            scale = (double)proc_roi.width / img_roi.width;
-            double ratio = (double)img_roi.height / img_roi.width;
-            proc_roi.height = proc_size.height * ratio;
-            proc_roi.y = (proc_size.height - proc_roi.height) * 0.5;
-        } else {
-            proc_roi.height = proc_size.height;
-            proc_roi.y = 0;
-            scale = (double)proc_roi.height / img_roi.height;
-            double ratio = (double)img_roi.width / img_roi.height;
-            proc_roi.width = proc_size.width * ratio;
-            proc_roi.x = (proc_size.width - proc_roi.width) * 0.5;
-        }
-    }
-
     void set_current(const std::array<double, 7> &state)
     {
         state_current = state;
-        d = fabs(state[2]);
-        //d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
-    }
-
-    cv::Mat extract_projection(const cv::Mat &image)
-    {
-        static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC3);
-        roi_rgb = 0;
-        //resize could use nearest to speed up?
-        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_CUBIC);
-        return process_projected(roi_rgb, blur);
-    }
-
-    void set_projection(const cv::Mat &image)
-    {
-        projection.img_warp = image;
-    }
-
-    void set_observation(const cv::Mat &image)
-    {
-        //image comes in as a 8U and must be converted to 32F
-        //static cv::Mat roi_32f = cv::Mat::zeros(proc_size, CV_32F);
-        //roi_u = 0;
-        //resize could use nearest to speed up?
-        proc_obs = 0;
-        cv::Mat roi_32f = process_eros(image(img_roi));
-        cv::resize(roi_32f, proc_obs(proc_roi), proc_roi.size(), 0, 0, cv::INTER_CUBIC);
-        //proc_obs = process_eros(roi_u);
-
-        projection.score = similarity_score(proc_obs, projection.img_warp);
-        //projection.score = projection.score < 0 ? 0 : projection.score;
     }
 
     void make_predictive_warps()
@@ -337,6 +257,7 @@ public:
 
     void score_predictive_warps()
     {
+        projection.score = similarity_score(proc_obs, projection.img_warp);
         for(auto &w : warps)
             if(w.active) w.score = similarity_score(proc_obs, w.img_warp);
     }
@@ -532,29 +453,29 @@ public:
 
     }
 
-    cv::Mat make_visualisation(cv::Mat full_obs) {
-        cv::Mat rgb_img, temp, temp8;
-        std::vector<cv::Mat> channels;
-        channels.resize(3);
-        channels[0] = cv::Mat::zeros(full_obs.size(), CV_8U);
-        //channels[1] = cv::Mat::zeros(full_obs.size(), CV_8U);
-        channels[2] = cv::Mat::zeros(full_obs.size(), CV_8U);
-        // green = events
-        full_obs.copyTo(channels[1]);
-        cv::Rect roi = img_roi;
+    // cv::Mat make_visualisation(cv::Mat full_obs) {
+    //     cv::Mat rgb_img, temp, temp8;
+    //     std::vector<cv::Mat> channels;
+    //     channels.resize(3);
+    //     channels[0] = cv::Mat::zeros(full_obs.size(), CV_8U);
+    //     //channels[1] = cv::Mat::zeros(full_obs.size(), CV_8U);
+    //     channels[2] = cv::Mat::zeros(full_obs.size(), CV_8U);
+    //     // green = events
+    //     full_obs.copyTo(channels[1]);
+    //     cv::Rect roi = img_roi;
 
-        // blue = positive space
-        cv::threshold(projection.img_warp(proc_roi), temp, 0.0, 0.5, cv::THRESH_TOZERO);
-        cv::resize(temp, temp, roi.size());
-        temp.convertTo(channels[0](roi), CV_8U, 1024);
-        // red = negative space
-        temp = projection.img_warp(proc_roi) * -1.0;
-        cv::threshold(temp, temp, 0.0, 0.5, cv::THRESH_TOZERO);
-        cv::resize(temp, temp, roi.size());
-        temp.convertTo(channels[2](roi), CV_8U, 1024);
+    //     // blue = positive space
+    //     cv::threshold(projection.img_warp(proc_roi), temp, 0.0, 0.5, cv::THRESH_TOZERO);
+    //     cv::resize(temp, temp, roi.size());
+    //     temp.convertTo(channels[0](roi), CV_8U, 1024);
+    //     // red = negative space
+    //     temp = projection.img_warp(proc_roi) * -1.0;
+    //     cv::threshold(temp, temp, 0.0, 0.5, cv::THRESH_TOZERO);
+    //     cv::resize(temp, temp, roi.size());
+    //     temp.convertTo(channels[2](roi), CV_8U, 1024);
 
-        cv::merge(channels, rgb_img);
+    //     cv::merge(channels, rgb_img);
 
-        return rgb_img;
-    }
+    //     return rgb_img;
+    // }
 };
