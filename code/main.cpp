@@ -99,7 +99,7 @@ public:
         int rescale_size = 100;
         int blur = rescale_size / 20;
         double dp =  1;//+rescale_size / 100;
-        warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
+        warp_handler.initialise(intrinsics, rescale_size);
         warp_handler.create_Ms(dp);
 
         img_handler.initialise(rescale_size, blur);

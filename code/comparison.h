@@ -17,22 +17,10 @@ class predictions {
 
 public:
 
-    //visual parameters
-    std::array<double, 6> cam;
+    //internal definitions
     enum cam_param_name{w,h,cx,cy,fx,fy};
-    double dp{2};
-
-    //size/resize parameters
-    cv::Size proc_size{cv::Size(100, 100)};
-    double scale{1.0};
-    cv::Mat proc_obs;
-    double d;
-
-    //states
-    std::array<double, 7> state_current;
-
-    //warps
     enum warp_name{xp, yp, zp, ap, bp, cp, xn, yn, zn, an, bn, cn};
+    enum axis_name{x=0,y=1,z=2,a=3,b=4,c=5};
     typedef struct warp_bundle
     {
         cv::Mat M;
@@ -45,60 +33,34 @@ public:
         bool active{false};
     } warp_bundle;
 
+    //fixed parameters to set
+    std::array<double, 6> cam;
+    double dp{2};
+    cv::Size proc_size{cv::Size(100, 100)};
+
+    //parameters that must be udpated externally
+    double scale{1.0};
+    cv::Mat proc_obs;
+
+    //internal variables
     warp_bundle projection;
     std::array<warp_bundle, 12> warps;
     std::deque<const warp_bundle *> warp_history;
 
-    cv::Mat process_projected(const cv::Mat &projected, int blur = 10) {
-        static cv::Mat canny_img, f, pos_hat, neg_hat;
-        static cv::Mat grey = cv::Mat::zeros(projected.size(), CV_32F);
-        blur = blur % 2 ? blur : blur + 1;
-
-        cv::Canny(projected, canny_img, 40, 40 * 3, 3);
-        canny_img.convertTo(f, CV_32F);
-
-        cv::GaussianBlur(f, pos_hat, cv::Size(blur, blur), 0);
-        cv::GaussianBlur(f, neg_hat, cv::Size(2 * blur - 1, 2 * blur - 1), 0);
-        pos_hat.copyTo(grey);
-        grey -= neg_hat;
-        // grey = pos_hat - neg_hat;
-
-        double minval, maxval;
-        cv::minMaxLoc(grey, &minval, &maxval);
-        double scale_factor = 1.0 / (2 * std::max(fabs(minval), fabs(maxval)));
-        grey *= scale_factor;
-
-        return grey;
-    }
-
-    cv::Mat process_eros(cv::Mat eros_img) {
-        static cv::Mat eros_blurred, eros_f, eros_fn;
-        cv::GaussianBlur(eros_img, eros_blurred, cv::Size(5, 5), 0);
-        eros_blurred.convertTo(eros_f, CV_32F, 0.003921569);
-        //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
-
-        return eros_f;
-    }
-
-    double similarity_score(const cv::Mat &observation, const cv::Mat &expectation) {
-        static cv::Mat muld;
-        muld = expectation.mul(observation);
-        return cv::sum(cv::sum(muld))[0];
-    }
+    //output
+    std::array<double, 7> state_current;
 
 public:
 
-    enum axis_name{x=0,y=1,z=2,a=3,b=4,c=5};
-
-    void initialise(const std::array<double, 6> intrinsics, cv::Size size_to_process, int blur)
+    void initialise(const std::array<double, 6> intrinsics, int size_to_process)
     {
         cam = intrinsics;
-        proc_size = size_to_process;
+        proc_size = cv::Size(size_to_process, size_to_process);
 
-        proc_obs = cv::Mat::zeros(proc_size, CV_32F);
-        projection.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         projection.axis = -1;
         projection.delta = 0;
+        proc_obs = cv::Mat::zeros(proc_size, CV_32F);
+        projection.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         for(auto &warp : warps) {
             warp.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         }
@@ -253,6 +215,12 @@ public:
         for(auto warp : warp_history)
             cv::remap(image, image, warp->rmp, warp->rmsp, cv::INTER_LINEAR);
         warp_history.clear();
+    }
+
+    double similarity_score(const cv::Mat &observation, const cv::Mat &expectation) {
+        static cv::Mat muld;
+        muld = expectation.mul(observation);
+        return cv::sum(cv::sum(muld))[0];
     }
 
     void score_predictive_warps()
