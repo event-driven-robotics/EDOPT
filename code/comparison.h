@@ -40,8 +40,8 @@ public:
     typedef struct warp_bundle
     {
         cv::Mat M;
-        cv::Mat rmx;
-        cv::Mat rmy;
+        cv::Mat rmp;
+        cv::Mat rmsp;
         cv::Mat img_warp;
         int axis{0};
         double delta{0.0};
@@ -128,30 +128,56 @@ public:
 
     void create_Ms(double dp)
     {
+        //variable set-up
         this->dp = dp;
         double theta = 0;
+
+        double cy = proc_size.height * 0.5;
+        double cx = proc_size.width  * 0.5;
+
+        cv::Mat prmx = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat prmy = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat nrmx = cv::Mat::zeros(proc_size, CV_32F);
+        cv::Mat nrmy = cv::Mat::zeros(proc_size, CV_32F);
+
+        //x shift by dp
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                //positive
+                prmx.at<float>(y, x) = x-dp;
+                prmy.at<float>(y, x) = y;
+                //negative
+                nrmx.at<float>(y, x) = x+dp;
+                nrmy.at<float>(y, x) = y;
+            }
+        }
+        cv::convertMaps(prmx, prmy, warps[xp].rmp, warps[xp].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[xn].rmp, warps[xn].rmsp, CV_16SC2);
+        warps[xp].axis = x; warps[xn].axis = x;
+        warps[xp].delta = dp; warps[xn].delta = -dp;
+
+        //y shift by dp
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                //positive
+                prmx.at<float>(y, x) = x;
+                prmy.at<float>(y, x) = y-dp;
+                //negative
+                nrmx.at<float>(y, x) = x;
+                nrmy.at<float>(y, x) = y+dp;
+            }
+        }
+        cv::convertMaps(prmx, prmy, warps[yp].rmp, warps[yp].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[yn].rmp, warps[yn].rmsp, CV_16SC2);
+        warps[yp].axis = y; warps[yn].axis = y;
+        warps[yp].delta = dp; warps[yn].delta = -dp;
+
         static std::array<cv::Point2f, 3> dst_n, dst_p;
         static std::array<cv::Point2f, 3> src{cv::Point(0, 0)};
         src[1].x = proc_size.width*0.5; src[1].y = proc_size.height*0.5;
         src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
 
         cv::Point cen = cv::Point(proc_size.width * 0.5, proc_size.height*0.5);
-
-        //x is a shift
-        warps[xp].axis = x;
-        warps[xp].M = (cv::Mat_<double>(2, 3) << 1, 0, dp, 0, 1, 0);
-        warps[xp].delta = dp;
-        warps[xn].axis = x;
-        warps[xn].M = (cv::Mat_<double>(2, 3) << 1, 0, -dp, 0, 1, 0);
-        warps[xn].delta = -dp;
-
-        //y is a shift
-        warps[yp].axis = y;
-        warps[yp].M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, dp);
-        warps[yp].delta = dp;
-        warps[yn].axis = y;
-        warps[yn].M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, -dp);
-        warps[yn].delta = -dp;
 
         //z we use a scaling matrix
         //this should have the centre in the image centre (not object centre)
@@ -164,63 +190,61 @@ public:
         warps[zn].delta = -dp / proc_size.width;
         warps[zn].M = cv::getRotationMatrix2D(cen, 0, 1+dp/(proc_size.width));
         
-        //roll we use the 3 point formula
-        src[1].x = proc_size.width*0.75; src[1].y = proc_size.height*0.25;
-        src[2].x = proc_size.width*0.25; src[2].y = proc_size.height;
-        theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5); 
-        for(int i = 0; i < dst_n.size(); i++) 
-        {
-            dst_n[i] = cv::Point2f(-(src[i].y - cen.y) * cam[fx] / cam[fy] * theta,
-                                   (src[i].x - cen.x) * cam[fy] / cam[fx] * theta);
-            dst_p[i] = src[i] + dst_n[i];
-            dst_n[i] = src[i] - dst_n[i];
+        //roll by 2 pixels at proc_width/2 distance
+        theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                double dx = -(y - cy) * cam[fx] / cam[fy] * theta;
+                double dy =  (x - cx) * cam[fy] / cam[fx] * theta;
+                //positive
+                prmx.at<float>(y, x) = x - dx;
+                prmy.at<float>(y, x) = y - dy;
+                //negative
+                nrmx.at<float>(y, x) = x + dx;
+                nrmy.at<float>(y, x) = y + dy;
+            }
         }
-        warps[cp].axis = c;
-        warps[cp].delta = theta;
-        warps[cp].M = cv::getAffineTransform(src, dst_p);
-        warps[cn].axis = c;
-        warps[cn].delta = -theta;
-        warps[cn].M = cv::getAffineTransform(src, dst_n);
+        cv::convertMaps(prmx, prmy, warps[cp].rmp, warps[cp].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[cn].rmp, warps[cn].rmsp, CV_16SC2);
+        warps[cp].axis = c; warps[cn].axis = c;
+        warps[cp].delta = theta; warps[cn].delta = -theta;
 
+        //yaw assuming a sphere the size of the proc_width
         theta = atan2(dp, proc_size.width * 0.5);
-        cv::Mat bp_rmx = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat bp_rmy = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat bn_rmx = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat bn_rmy = cv::Mat::zeros(proc_size, CV_32F);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
-                bp_rmx.at<float>(y, x) = x + dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
-                bn_rmx.at<float>(y, x) = x - dp * cos(0.5 * M_PI * (x - cen.x) / (proc_size.width * 0.5));
-                bp_rmy.at<float>(y, x) = y;
-                bn_rmy.at<float>(y, x) = y;
+                double dx = -dp * cos(0.5 * M_PI * (x - cx) / (proc_size.width * 0.5));
+                //positive
+                prmx.at<float>(y, x) = x - dx;
+                prmy.at<float>(y, x) = y;
+                //negative
+                nrmx.at<float>(y, x) = x + dx;
+                nrmy.at<float>(y, x) = y;
             }
         }
-        cv::convertMaps(bp_rmx, bp_rmy, warps[bp].rmx, warps[bp].rmy, CV_16SC2);
-        cv::convertMaps(bn_rmx, bn_rmy, warps[bn].rmx, warps[bn].rmy, CV_16SC2);
-        warps[bp].axis = b;
-        warps[bp].delta = theta;
-        warps[bn].delta = -theta;
-        warps[bn].axis = b;
+        cv::convertMaps(prmx, prmy, warps[bp].rmp, warps[bp].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[bn].rmp, warps[bn].rmsp, CV_16SC2);
+        warps[bp].axis = b; warps[bn].axis = b;
+        warps[bp].delta = theta; warps[bn].delta = -theta;
+        
 
+        //pitch assuming the object is a sphere the size of proc_height
         theta = atan2(dp, proc_size.height * 0.5);
-        cv::Mat ap_rmx = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat ap_rmy = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat an_rmx = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat an_rmy = cv::Mat::zeros(proc_size, CV_32F);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
-                ap_rmx.at<float>(y, x) = x;
-                an_rmx.at<float>(y, x) = x;
-                ap_rmy.at<float>(y, x) = y + dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
-                an_rmy.at<float>(y, x) = y - dp * cos(0.5 * M_PI * (y - cen.y) / (proc_size.height * 0.5));
+                double dy = dp * cos(0.5 * M_PI * (y - cy) / (proc_size.height * 0.5));
+                //positive
+                prmx.at<float>(y, x) = x;
+                prmy.at<float>(y, x) = y - dy;
+                //negative
+                nrmx.at<float>(y, x) = x;
+                nrmy.at<float>(y, x) = y + dy;
             }
         }
-        cv::convertMaps(ap_rmx, ap_rmy, warps[ap].rmx, warps[ap].rmy, CV_16SC2);
-        cv::convertMaps(an_rmx, an_rmy, warps[an].rmx, warps[an].rmy, CV_16SC2);
-        warps[ap].axis = a;
-        warps[ap].delta = -theta;
-        warps[an].delta = theta;
-        warps[an].axis = a;
+        cv::convertMaps(prmx, prmy, warps[ap].rmp, warps[ap].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[an].rmp, warps[an].rmsp, CV_16SC2);
+        warps[ap].axis = a; warps[an].axis = a;
+        warps[ap].delta = theta; warps[an].delta = -theta;
     }
 
     void extract_rois(const cv::Mat &projected)
@@ -294,22 +318,18 @@ public:
     {
         // X
         if (warps[xp].active) {
-            cv::warpAffine(projection.img_warp, warps[xp].img_warp, warps[xp].M,
-                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[xp].img_warp, warps[xp].rmp, warps[xp].rmsp,cv::INTER_LINEAR);
         }
         if (warps[xn].active) {
-            cv::warpAffine(projection.img_warp, warps[xn].img_warp, warps[xn].M,
-                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[xn].img_warp, warps[xn].rmp, warps[xn].rmsp, cv::INTER_LINEAR);
         }
 
         // Y
         if (warps[yp].active) {
-            cv::warpAffine(projection.img_warp, warps[yp].img_warp, warps[yp].M,
-                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[yp].img_warp, warps[yp].rmp, warps[yp].rmsp,cv::INTER_LINEAR);
         }
         if (warps[yn].active) {
-            cv::warpAffine(projection.img_warp, warps[yn].img_warp, warps[yn].M,
-                           proc_size, cv::INTER_NEAREST, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[yn].img_warp, warps[yn].rmp, warps[yn].rmsp,cv::INTER_LINEAR);
         }
 
         // Z
@@ -324,28 +344,26 @@ public:
 
         // A
         if (warps[ap].active) {
-            cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmx, warps[ap].rmy, cv::INTER_LINEAR);
+            cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmp, warps[ap].rmsp, cv::INTER_LINEAR);
         }
         if (warps[an].active) {
-            cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmx, warps[an].rmy, cv::INTER_LINEAR);
+            cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmp, warps[an].rmsp, cv::INTER_LINEAR);
         }
 
         // B
         if (warps[bp].active) {
-            cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmx, warps[bp].rmy, cv::INTER_LINEAR);
+            cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmp, warps[bp].rmsp, cv::INTER_LINEAR);
         }
         if (warps[bn].active) {
-            cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmx, warps[bn].rmy, cv::INTER_LINEAR);
+            cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmp, warps[bn].rmsp, cv::INTER_LINEAR);
         }
 
         // C
         if (warps[cp].active) {
-            cv::warpAffine(projection.img_warp, warps[cp].img_warp, warps[cp].M,
-                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[cp].img_warp, warps[cp].rmp, warps[cp].rmsp, cv::INTER_LINEAR);
         }
         if (warps[cn].active) {
-            cv::warpAffine(projection.img_warp, warps[cn].img_warp, warps[cn].M,
-                           proc_size, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+            cv::remap(projection.img_warp, warps[cn].img_warp, warps[cn].rmp, warps[cn].rmsp, cv::INTER_LINEAR);
         }
     }
 
@@ -378,9 +396,7 @@ public:
                 perform_rotation(state_current, 2, best.delta);
                 break;
         }
-        warp_history.push_back(best.name);
-
-
+        //warp_history.push_back(best.name);
     }
 
     void update_all_possible()
