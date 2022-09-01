@@ -33,7 +33,6 @@ public:
 
     //states
     std::array<double, 7> state_current;
-    std::array<double, 7> state_projection;
 
     //warps
     enum warp_name{xp, yp, zp, ap, bp, cp, xn, yn, zn, an, bn, cn};
@@ -52,7 +51,7 @@ public:
 
     warp_bundle projection;
     std::array<warp_bundle, 12> warps;
-    std::deque<warp_name> warp_history;
+    std::deque<const warp_bundle *> warp_history;
 
     cv::Mat process_projected(const cv::Mat &projected, int blur = 10) {
         static cv::Mat canny_img, f, pos_hat, neg_hat;
@@ -293,14 +292,18 @@ public:
         //d = sqrt(state[0] * state[0] + state[1] * state[1] + state[2] * state[2]);
     }
 
-    void set_projection(const std::array<double, 7> &state, const cv::Mat &image)
+    cv::Mat extract_projection(const cv::Mat &image)
     {
-        state_projection = state;
         static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC3);
         roi_rgb = 0;
         //resize could use nearest to speed up?
         cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_CUBIC);
-        projection.img_warp = process_projected(roi_rgb, blur);
+        return process_projected(roi_rgb, blur);
+    }
+
+    void set_projection(const cv::Mat &image)
+    {
+        projection.img_warp = image;
     }
 
     void set_observation(const cv::Mat &image)
@@ -318,58 +321,21 @@ public:
         //projection.score = projection.score < 0 ? 0 : projection.score;
     }
 
-    void warp()
+    void make_predictive_warps()
     {
-        // X
-        if (warps[xp].active) {
-            cv::remap(projection.img_warp, warps[xp].img_warp, warps[xp].rmp, warps[xp].rmsp,cv::INTER_LINEAR);
-        }
-        if (warps[xn].active) {
-            cv::remap(projection.img_warp, warps[xn].img_warp, warps[xn].rmp, warps[xn].rmsp, cv::INTER_LINEAR);
-        }
-
-        // Y
-        if (warps[yp].active) {
-            cv::remap(projection.img_warp, warps[yp].img_warp, warps[yp].rmp, warps[yp].rmsp,cv::INTER_LINEAR);
-        }
-        if (warps[yn].active) {
-            cv::remap(projection.img_warp, warps[yn].img_warp, warps[yn].rmp, warps[yn].rmsp,cv::INTER_LINEAR);
-        }
-
-        // Z
-        if (warps[zp].active) {
-            cv::remap(projection.img_warp, warps[zp].img_warp, warps[zp].rmp, warps[zp].rmsp,cv::INTER_LINEAR);
-        }
-        if (warps[zn].active) {
-            cv::remap(projection.img_warp, warps[zn].img_warp, warps[zn].rmp, warps[zn].rmsp,cv::INTER_LINEAR);
-        }
-
-        // A
-        if (warps[ap].active) {
-            cv::remap(projection.img_warp, warps[ap].img_warp, warps[ap].rmp, warps[ap].rmsp, cv::INTER_LINEAR);
-        }
-        if (warps[an].active) {
-            cv::remap(projection.img_warp, warps[an].img_warp, warps[an].rmp, warps[an].rmsp, cv::INTER_LINEAR);
-        }
-
-        // B
-        if (warps[bp].active) {
-            cv::remap(projection.img_warp, warps[bp].img_warp, warps[bp].rmp, warps[bp].rmsp, cv::INTER_LINEAR);
-        }
-        if (warps[bn].active) {
-            cv::remap(projection.img_warp, warps[bn].img_warp, warps[bn].rmp, warps[bn].rmsp, cv::INTER_LINEAR);
-        }
-
-        // C
-        if (warps[cp].active) {
-            cv::remap(projection.img_warp, warps[cp].img_warp, warps[cp].rmp, warps[cp].rmsp, cv::INTER_LINEAR);
-        }
-        if (warps[cn].active) {
-            cv::remap(projection.img_warp, warps[cn].img_warp, warps[cn].rmp, warps[cn].rmsp, cv::INTER_LINEAR);
-        }
+        for(auto &warp : warps)
+            if(warp.active)
+                cv::remap(projection.img_warp, warp.img_warp, warp.rmp, warp.rmsp,cv::INTER_LINEAR);
     }
 
-    void score()
+    void warp_by_history(cv::Mat &image)
+    {
+        for(auto warp : warp_history)
+            cv::remap(image, image, warp->rmp, warp->rmsp, cv::INTER_LINEAR);
+        warp_history.clear();
+    }
+
+    void score_predictive_warps()
     {
         for(auto &w : warps)
             if(w.active) w.score = similarity_score(proc_obs, w.img_warp);
@@ -398,7 +364,7 @@ public:
                 perform_rotation(state_current, 2, best.delta);
                 break;
         }
-        //warp_history.push_back(best.name);
+        warp_history.push_back(&best);
     }
 
     void update_all_possible()

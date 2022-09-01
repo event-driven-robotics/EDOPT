@@ -31,7 +31,7 @@ private:
 
     SICAD* si_cad;
 
-    cv::Mat proj_rgb, eros_u;
+    cv::Mat proj_rgb, eros_u, proj_32f;
     double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
     int toc_count{0};
     bool step{false};
@@ -103,6 +103,7 @@ public:
 
         eros_u = cv::Mat::zeros(img_size, CV_8U);
         proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        proj_32f = cv::Mat::zeros(img_size, CV_32F);
 
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
@@ -186,12 +187,13 @@ public:
         //pause the warp_loop() 
 
         //warp the current projection based on the warp list
-
-        //clear the warp list
+        // and clear the list
+        warp_handler.warp_by_history(proj_32f);
 
         //set the current image
+        warp_handler.set_projection(proj_32f);
 
-        //get the current state
+        state = warp_handler.state_current;
 
         //unpause the warp_loop()
 
@@ -202,7 +204,8 @@ public:
         warp_handler.extract_rois(proj_rgb);
 
         //process the projection
-        warp_handler.set_projection(state, proj_rgb);
+        proj_32f = warp_handler.extract_projection(proj_rgb);
+        
 
         
 
@@ -215,25 +218,23 @@ public:
     void warp_loop()
     {
         //perform warps
-        warp_handler.warp();
+        warp_handler.make_predictive_warps();
 
         //get the current EROS
         eros_handler.eros.getSurface().copyTo(eros_u);
         warp_handler.set_observation(eros_u);
 
         //perform the comparison
-        warp_handler.score();
+        warp_handler.score_predictive_warps();
 
         //update the state
         if (step) {
             // warp_handler.update_from_max();
             // warp_handler.update_all_possible();
             warp_handler.update_heuristically();
-            state = warp_handler.state_current;
+            //state = warp_handler.state_current;
             step = true;
         }
-
-        //push to the warp list
 
         //yield to projection loop if needed.
 
@@ -258,8 +259,10 @@ public:
 
             warp_handler.extract_rois(proj_rgb);
             double dtoc_proj = Time::now();
-                        
-            warp_handler.set_projection(state, proj_rgb);
+            
+            proj_32f = warp_handler.extract_projection(proj_rgb);
+            warp_handler.set_projection(proj_32f);
+            warp_handler.make_predictive_warps();
             double dtoc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
@@ -267,15 +270,8 @@ public:
             warp_handler.set_observation(eros_u);
             double dtoc_eros = Time::now();
 
-            warp_handler.warp();
-            warp_handler.score();
+            warp_handler.score_predictive_warps();
             
-            // warp_handler.compare_to_warp_x();
-            // warp_handler.compare_to_warp_y();
-            // warp_handler.compare_to_warp_z();
-            // warp_handler.compare_to_warp_a();
-            // warp_handler.compare_to_warp_b();
-            // warp_handler.compare_to_warp_c();
             
             if(step) {
                 //warp_handler.update_from_max();
