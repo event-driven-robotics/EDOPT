@@ -207,7 +207,7 @@ public:
     {
         for(auto &warp : warps)
             if(warp.active)
-                cv::remap(projection.img_warp, warp.img_warp, warp.rmp, warp.rmsp,cv::INTER_LINEAR);
+                cv::remap(projection.img_warp, warp.img_warp, warp.rmp, warp.rmsp, cv::INTER_LINEAR);
     }
 
     void warp_by_history(cv::Mat &image)
@@ -226,6 +226,7 @@ public:
     void score_predictive_warps()
     {
         projection.score = similarity_score(proc_obs, projection.img_warp);
+        projection.score = projection.score < 0 ? 0 : projection.score;
         for(auto &w : warps)
             if(w.active) w.score = similarity_score(proc_obs, w.img_warp);
     }

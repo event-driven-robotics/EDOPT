@@ -45,6 +45,7 @@ private:
     double period{0.1};
 
     int proj_count{0}, warp_count{0};
+    bool projection_available{false};
 
     std::ofstream fs;
     std::string file_name;
@@ -156,12 +157,13 @@ public:
         static cv::Mat vis, proj_vis, eros_vis;
         //vis = warp_handler.make_visualisation(eros_u);
         proj_rgb.copyTo(proj_vis);
-        cv::cvtColor(eros_u, eros_vis, cv::COLOR_GRAY2BGR);
+        cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
         vis = proj_rgb*0.5 + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
         warps_r = warp_handler.create_rotation_visualisation();
+        cv::flip(vis, vis, 1);
         cv::imshow("EROS", vis);
         cv::imshow("Translations", warps_t+0.5);
         cv::imshow("Rotations", warps_r+0.5);
@@ -205,17 +207,24 @@ public:
         while (!isStopping()) 
         {
             // project the current state
-            complexProjection(si_cad, camera_pose, state, proj_rgb);
+            complexProjection(si_cad, camera_pose, warp_handler.state_current, proj_rgb);
 
             // get the ROI of the current state
-            img_handler.set_projection_rois(proj_rgb);
+            img_handler.set_projection_rois(proj_rgb, 20);
             // process the projection
             img_handler.setProcProj(proj_rgb);
+            projection_available = true;
+            proj_count++;
+        }
+    }
 
-            // safe section
+    void warp_loop()
+    {
+        while (!isStopping()) 
+        {
+            if(projection_available) 
             {
-                std::lock_guard<std::mutex> lock(m);
-
+                projection_available = false;
                 // set the current image
                 img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
 
@@ -226,25 +235,14 @@ public:
                 // copy over the region of interest (needs to be thread safe)
                 img_handler.set_obs_rois_from_projected();
                 warp_handler.scale = img_handler.scale;
-
-                // extract the current state for the next projection
-                state = warp_handler.state_current;
             }
-            proj_count++;
-        }
-    }
 
-    void warp_loop()
-    {
-        while (!isStopping()) 
-        {
-            m.lock();
             // perform warps
             warp_handler.make_predictive_warps();
 
             // get the current EROS
-            eros_handler.eros.getSurface().copyTo(eros_u);
-            img_handler.setProcObs(eros_u);
+            //eros_handler.eros.getSurface().copyTo(eros_u);
+            img_handler.setProcObs(eros_handler.eros.getSurface());
             warp_handler.proc_obs = img_handler.proc_obs;
 
             // perform the comparison
@@ -259,9 +257,8 @@ public:
                 step = true;
             }
             warp_count++;
-            // yield to projection loop if needed.
-            m.unlock();
-            std::this_thread::yield();
+
+
         }
     }
 
