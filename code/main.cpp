@@ -2,6 +2,7 @@
 
 #include <SuperimposeMesh/SICAD.h>
 #include <opencv2/opencv.hpp>
+#include <mutex>
 
 #include <yarp/os/all.h>
 using namespace yarp::os;
@@ -18,6 +19,9 @@ class tracker : public yarp::os::RFModule
 private:
 
     std::thread worker;
+    std::thread proj_worker;
+    std::thread warp_worker;
+    std::mutex m;
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
 
@@ -39,6 +43,8 @@ private:
     int toc_count{0};
     bool step{false};
     double period{0.1};
+
+    int proj_count{0}, warp_count{0};
 
     std::ofstream fs;
     std::string file_name;
@@ -101,6 +107,7 @@ public:
         double dp =  1;//+rescale_size / 100;
         warp_handler.initialise(intrinsics, rescale_size);
         warp_handler.create_Ms(dp);
+        warp_handler.set_current(state);
 
         img_handler.initialise(rescale_size, blur);
 
@@ -123,7 +130,9 @@ public:
         //quaternion_test();
         //quaternion_test_camera();
 
-        worker = std::thread([this]{sequential_loop();});
+        //worker = std::thread([this]{sequential_loop();});
+        proj_worker = std::thread([this]{projection_loop();});
+        warp_worker = std::thread([this]{warp_loop();});
 
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
@@ -178,83 +187,88 @@ public:
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
 
-        if (toc_count) {
-            yInfo() << (int)(toc_eros / toc_count) << "\t"
-                    << (int)(toc_proj / toc_count) << "\t"
-                    << (int)(toc_projproc / toc_count) << "\t"
-                    << (int)(toc_warp / toc_count) << "\t"
-                    << (int) toc_count / period << "Hz";
-            toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
-        }
+        // if (toc_count) {
+        //     yInfo() << (int)(toc_eros / toc_count) << "\t"
+        //             << (int)(toc_proj / toc_count) << "\t"
+        //             << (int)(toc_projproc / toc_count) << "\t"
+        //             << (int)(toc_warp / toc_count) << "\t"
+        //             << (int) toc_count / period << "Hz";
+        //     toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
+        // }
+        yInfo() << (int)(warp_count/period) << "Hz" << (int)(proj_count/period) << "Hz";
+        warp_count = proj_count = 0;
         return true;
     }
 
     void projection_loop()
     {
-        //safe section
+        while (!isStopping()) 
         {
-            // pause the warp_loop()
+            // project the current state
+            complexProjection(si_cad, camera_pose, state, proj_rgb);
 
-            // set the current image
-            img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+            // get the ROI of the current state
+            img_handler.set_projection_rois(proj_rgb);
+            // process the projection
+            img_handler.setProcProj(proj_rgb);
 
-            // warp the current projection based on the warp list
-            //  and clear the list
-            warp_handler.warp_by_history(warp_handler.projection.img_warp);
+            // safe section
+            {
+                std::lock_guard<std::mutex> lock(m);
 
-            // copy over the region of interest (needs to be thread safe)
-            img_handler.set_obs_rois_from_projected();
-            warp_handler.scale = img_handler.scale;
+                // set the current image
+                img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
 
-            // extract the current state for the next projection
-            state = warp_handler.state_current;
+                // warp the current projection based on the warp list
+                //  and clear the list
+                warp_handler.warp_by_history(warp_handler.projection.img_warp);
 
-            // unpause the warp_loop()
+                // copy over the region of interest (needs to be thread safe)
+                img_handler.set_obs_rois_from_projected();
+                warp_handler.scale = img_handler.scale;
+
+                // extract the current state for the next projection
+                state = warp_handler.state_current;
+            }
+            proj_count++;
         }
-
-        //project the current state
-        complexProjection(si_cad, camera_pose, state, proj_rgb);
-
-        //get the ROI of the current state
-        img_handler.set_projection_rois(proj_rgb);
-        //process the projection
-        img_handler.setProcProj(proj_rgb);
-
-        
     }
 
     void warp_loop()
     {
-        //perform warps
-        warp_handler.make_predictive_warps();
+        while (!isStopping()) 
+        {
+            m.lock();
+            // perform warps
+            warp_handler.make_predictive_warps();
 
-        //get the current EROS
-        eros_handler.eros.getSurface().copyTo(eros_u);
-        img_handler.setProcObs(eros_u);
-        warp_handler.proc_obs = img_handler.proc_obs;
+            // get the current EROS
+            eros_handler.eros.getSurface().copyTo(eros_u);
+            img_handler.setProcObs(eros_u);
+            warp_handler.proc_obs = img_handler.proc_obs;
 
-        //perform the comparison
-        warp_handler.score_predictive_warps();
+            // perform the comparison
+            warp_handler.score_predictive_warps();
 
-        //update the state
-        if (step) {
-            // warp_handler.update_from_max();
-            // warp_handler.update_all_possible();
-            warp_handler.update_heuristically();
-            //state = warp_handler.state_current;
-            step = true;
+            // update the state and update the warped image projection
+            if (step) {
+                // warp_handler.update_from_max();
+                // warp_handler.update_all_possible();
+                warp_handler.update_heuristically();
+                // state = warp_handler.state_current;
+                step = true;
+            }
+            warp_count++;
+            // yield to projection loop if needed.
+            m.unlock();
+            std::this_thread::yield();
         }
-
-        //update the projection warp image based on the update
-
-        //yield to projection loop if needed.
-
     }
 
     void sequential_loop()
     {
         double dataset_time = -1;
-        warp_handler.set_current(state);
+        
 
         while (!isStopping()) {
 
@@ -413,8 +427,11 @@ public:
     {
         yInfo() << "waiting for eros handler ... ";
         eros_handler.stop();
-        yInfo() << "waiting for workther thread ... ";
+        yInfo() << "waiting for worker threads ... ";
         worker.join();
+        warp_worker.join();
+        proj_worker.join();
+
         if(fs.is_open())
         {
             yInfo() << "Writing data ...";
@@ -423,6 +440,7 @@ public:
             fs.close();
             yInfo() << "Finished Writing data ...";
         }
+
         yInfo() << "close function finished";
         return true;
     }
