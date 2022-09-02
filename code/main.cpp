@@ -220,10 +220,12 @@ public:
 
     void warp_loop()
     {
+        bool updated = true;
         while (!isStopping()) 
         {
             if(projection_available) 
             {
+                updated = true;
                 projection_available = false;
                 // set the current image
                 img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
@@ -238,7 +240,8 @@ public:
             }
 
             // perform warps
-            warp_handler.make_predictive_warps();
+            if(updated)
+                warp_handler.make_predictive_warps();
 
             // get the current EROS
             //eros_handler.eros.getSurface().copyTo(eros_u);
@@ -252,9 +255,9 @@ public:
             if (step) {
                 // warp_handler.update_from_max();
                 // warp_handler.update_all_possible();
-                warp_handler.update_heuristically();
+                updated = warp_handler.update_heuristically();
                 // state = warp_handler.state_current;
-                step = true;
+                //step = true;
             }
             warp_count++;
 

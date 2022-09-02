@@ -275,8 +275,9 @@ public:
         update_state(*best);
     }
 
-    void update_heuristically()
+    bool update_heuristically()
     {
+        int prev_history_length = warp_history.size();
         //best of x axis and roation around y (yaw)
         warp_bundle *best;
         best = &projection;
@@ -319,8 +320,10 @@ public:
             best = &warps[zp];
         if (warps[zn].score > best->score)
             best = &warps[zn];
-        if(best->score > projection.score)
+        if(best->score > projection.score) 
             update_state(*best);
+
+        return warp_history.size() > prev_history_length;
     }
 
     void score_overlay(double score, cv::Mat image)
