@@ -2,6 +2,7 @@
 
 #include <SuperimposeMesh/SICAD.h>
 #include <opencv2/opencv.hpp>
+#include <mutex>
 
 #include <yarp/os/all.h>
 using namespace yarp::os;
@@ -9,6 +10,7 @@ using namespace yarp::os;
 #include "erosdirect.h"
 #include "projection.h"
 #include "comparison.h"
+#include "image_processing.h"
 
 
 
@@ -17,8 +19,13 @@ class tracker : public yarp::os::RFModule
 private:
 
     std::thread worker;
+    std::thread proj_worker;
+    std::thread warp_worker;
+    std::mutex m;
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
+
+    imageProcessing img_handler;
 
     cv::Size img_size;
 
@@ -31,11 +38,14 @@ private:
 
     SICAD* si_cad;
 
-    cv::Mat proj_rgb, eros_u;
+    cv::Mat proj_rgb, eros_u, proj_32f;
     double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
     int toc_count{0};
     bool step{false};
     double period{0.1};
+
+    int proj_count{0}, warp_count{0};
+    bool projection_available{false};
 
     std::ofstream fs;
     std::string file_name;
@@ -71,7 +81,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AEd:i"))) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:fi"))) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -91,11 +101,16 @@ public:
         //     return false;
         // }
 
+        
+
         int rescale_size = 100;
         int blur = rescale_size / 20;
         double dp =  1;//+rescale_size / 100;
-        warp_handler.initialise(intrinsics, cv::Size(rescale_size, rescale_size), blur);
+        warp_handler.initialise(intrinsics, rescale_size);
         warp_handler.create_Ms(dp);
+        warp_handler.set_current(state);
+
+        img_handler.initialise(rescale_size, blur);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", img_size);
@@ -103,6 +118,7 @@ public:
 
         eros_u = cv::Mat::zeros(img_size, CV_8U);
         proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        proj_32f = cv::Mat::zeros(img_size, CV_32F);
 
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
@@ -115,7 +131,9 @@ public:
         //quaternion_test();
         //quaternion_test_camera();
 
-        worker = std::thread([this]{main_loop();});
+        //worker = std::thread([this]{sequential_loop();});
+        proj_worker = std::thread([this]{projection_loop();});
+        warp_worker = std::thread([this]{warp_loop();});
 
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
@@ -139,12 +157,13 @@ public:
         static cv::Mat vis, proj_vis, eros_vis;
         //vis = warp_handler.make_visualisation(eros_u);
         proj_rgb.copyTo(proj_vis);
-        cv::cvtColor(eros_u, eros_vis, cv::COLOR_GRAY2BGR);
+        cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
         vis = proj_rgb*0.5 + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
         warps_r = warp_handler.create_rotation_visualisation();
+        cv::flip(vis, vis, 1);
         cv::imshow("EROS", vis);
         cv::imshow("Translations", warps_t+0.5);
         cv::imshow("Rotations", warps_r+0.5);
@@ -170,21 +189,86 @@ public:
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
 
-        if (toc_count) {
-            yInfo() << (int)(toc_eros / toc_count) << "\t"
-                    << (int)(toc_proj / toc_count) << "\t"
-                    << (int)(toc_projproc / toc_count) << "\t"
-                    << (int)(toc_warp / toc_count) << "\t"
-                    << (int) toc_count / period << "Hz";
-            toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
-        }
+        // if (toc_count) {
+        //     yInfo() << (int)(toc_eros / toc_count) << "\t"
+        //             << (int)(toc_proj / toc_count) << "\t"
+        //             << (int)(toc_projproc / toc_count) << "\t"
+        //             << (int)(toc_warp / toc_count) << "\t"
+        //             << (int) toc_count / period << "Hz";
+        //     toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
+        // }
+        yInfo() << (int)(warp_count/period) << "Hz" << (int)(proj_count/period) << "Hz";
+        warp_count = proj_count = 0;
         return true;
     }
 
-    void main_loop()
+    void projection_loop()
+    {
+        while (!isStopping()) 
+        {
+            // project the current state
+            complexProjection(si_cad, camera_pose, warp_handler.state_current, proj_rgb);
+
+            // get the ROI of the current state
+            img_handler.set_projection_rois(proj_rgb, 20);
+            // process the projection
+            img_handler.setProcProj(proj_rgb);
+            projection_available = true;
+            proj_count++;
+        }
+    }
+
+    void warp_loop()
+    {
+        bool updated = true;
+        while (!isStopping()) 
+        {
+            if(projection_available) 
+            {
+                updated = true;
+                projection_available = false;
+                // set the current image
+                img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+
+                // warp the current projection based on the warp list
+                //  and clear the list
+                warp_handler.warp_by_history(warp_handler.projection.img_warp);
+
+                // copy over the region of interest (needs to be thread safe)
+                img_handler.set_obs_rois_from_projected();
+                warp_handler.scale = img_handler.scale;
+            }
+
+            // perform warps
+            if(updated)
+                warp_handler.make_predictive_warps();
+
+            // get the current EROS
+            //eros_handler.eros.getSurface().copyTo(eros_u);
+            img_handler.setProcObs(eros_handler.eros.getSurface());
+            warp_handler.proc_obs = img_handler.proc_obs;
+
+            // perform the comparison
+            warp_handler.score_predictive_warps();
+
+            // update the state and update the warped image projection
+            if (step) {
+                // warp_handler.update_from_max();
+                // warp_handler.update_all_possible();
+                updated = warp_handler.update_heuristically();
+                // state = warp_handler.state_current;
+                //step = true;
+            }
+            warp_count++;
+
+
+        }
+    }
+
+    void sequential_loop()
     {
         double dataset_time = -1;
-        warp_handler.set_current(state);
+        
 
         while (!isStopping()) {
 
@@ -195,23 +279,28 @@ public:
                 return;
             }
 
-            warp_handler.extract_rois(proj_rgb);
+            img_handler.set_projection_rois(proj_rgb);
+            img_handler.set_obs_rois_from_projected();
+            warp_handler.scale = img_handler.scale;
+            //warp_handler.extract_rois(proj_rgb);
             double dtoc_proj = Time::now();
-                        
-            warp_handler.set_projection(state, proj_rgb);
+            
+            img_handler.setProcProj(proj_rgb);
+            //proj_32f = warp_handler.extract_projection(proj_rgb);
+            //warp_handler.set_projection(proj_32f);
+            warp_handler.projection.img_warp = img_handler.proc_proj;
+            warp_handler.make_predictive_warps();
             double dtoc_projproc = Time::now();
 
             eros_handler.eros.getSurface().copyTo(eros_u);
             dataset_time = eros_handler.tic;
-            warp_handler.set_observation(eros_u);
+            img_handler.setProcObs(eros_u);
+            warp_handler.proc_obs = img_handler.proc_obs;
+            //warp_handler.set_observation(eros_u);
             double dtoc_eros = Time::now();
+
+            warp_handler.score_predictive_warps();
             
-            warp_handler.compare_to_warp_x();
-            warp_handler.compare_to_warp_y();
-            warp_handler.compare_to_warp_z();
-            warp_handler.compare_to_warp_a();
-            warp_handler.compare_to_warp_b();
-            warp_handler.compare_to_warp_c();
             
             if(step) {
                 //warp_handler.update_from_max();
@@ -338,8 +427,11 @@ public:
     {
         yInfo() << "waiting for eros handler ... ";
         eros_handler.stop();
-        yInfo() << "waiting for workther thread ... ";
+        yInfo() << "waiting for worker threads ... ";
         worker.join();
+        warp_worker.join();
+        proj_worker.join();
+
         if(fs.is_open())
         {
             yInfo() << "Writing data ...";
@@ -348,6 +440,7 @@ public:
             fs.close();
             yInfo() << "Finished Writing data ...";
         }
+
         yInfo() << "close function finished";
         return true;
     }

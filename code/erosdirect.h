@@ -95,7 +95,7 @@ public:
 public:
     bool start(cv::Size resolution, std::string sourcename, std::string portname)
     {
-        eros.init(resolution.width, resolution.height, 7, 0.3);
+        eros.init(resolution.width, resolution.height, 9, 0.5);
 
         if (!input_port.open(portname))
             return false;
