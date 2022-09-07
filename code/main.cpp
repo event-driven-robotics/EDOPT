@@ -12,6 +12,7 @@ using namespace yarp::os;
 #include "comparison.h"
 #include "image_processing.h"
 
+//__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia 
 
 
 class tracker : public yarp::os::RFModule 
@@ -49,6 +50,7 @@ private:
 
     std::ofstream fs;
     std::string file_name;
+    bool parallel_method;
 
 public:
 
@@ -57,6 +59,9 @@ public:
         setName(rf.check("name", Value("/ekom")).asString().c_str());
         double bias_sens = rf.check("s", Value(0.6)).asFloat64();
         double cam_filter = rf.check("f", Value(0.1)).asFloat64();
+
+        parallel_method = rf.check("parallel", Value(false)).asBool();
+
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
@@ -81,7 +86,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:fi"))) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"))) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -131,9 +136,13 @@ public:
         //quaternion_test();
         //quaternion_test_camera();
 
-        //worker = std::thread([this]{sequential_loop();});
-        proj_worker = std::thread([this]{projection_loop();});
-        warp_worker = std::thread([this]{warp_loop();});
+        if(parallel_method) {
+            proj_worker = std::thread([this]{projection_loop();});
+            warp_worker = std::thread([this]{warp_loop();});
+        } else {
+            worker = std::thread([this]{sequential_loop();});
+        }
+        
 
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
@@ -163,7 +172,7 @@ public:
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
         warps_r = warp_handler.create_rotation_visualisation();
-        cv::flip(vis, vis, 1);
+        //cv::flip(vis, vis, 1);
         cv::imshow("EROS", vis);
         cv::imshow("Translations", warps_t+0.5);
         cv::imshow("Rotations", warps_r+0.5);
@@ -184,22 +193,24 @@ public:
         // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
         // s = warp_handler.scores_n;
         // yInfo() << warp_handler.score_projection << s[0] << s[1] << s[2] << s[3] << s[4] << s[5];
-        // yInfo();
+         //yInfo();
 
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
 
-        // if (toc_count) {
-        //     yInfo() << (int)(toc_eros / toc_count) << "\t"
-        //             << (int)(toc_proj / toc_count) << "\t"
-        //             << (int)(toc_projproc / toc_count) << "\t"
-        //             << (int)(toc_warp / toc_count) << "\t"
-        //             << (int) toc_count / period << "Hz";
-        //     toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
-        // }
-        yInfo() << (int)(warp_count/period) << "Hz" << (int)(proj_count/period) << "Hz";
-        warp_count = proj_count = 0;
-        return true;
+        if (toc_count) {
+            yInfo() << (int)(toc_eros / toc_count) << "\t"
+                    << (int)(toc_proj / toc_count) << "\t"
+                    << (int)(toc_projproc / toc_count) << "\t"
+                    << (int)(toc_warp / toc_count) << "\t"
+                    << (int) toc_count / period << "Hz";
+            toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
+        }
+        if(warp_count || proj_count) {
+            yInfo() << (int)(warp_count/period) << "Hz" << (int)(proj_count/period) << "Hz";
+            warp_count = proj_count = 0;
+        }
+         return true;
     }
 
     void projection_loop()
@@ -220,7 +231,7 @@ public:
 
     void warp_loop()
     {
-        bool updated = true;
+        bool updated = false;
         while (!isStopping()) 
         {
             if(projection_available) 
@@ -244,7 +255,6 @@ public:
                 warp_handler.make_predictive_warps();
 
             // get the current EROS
-            //eros_handler.eros.getSurface().copyTo(eros_u);
             img_handler.setProcObs(eros_handler.eros.getSurface());
             warp_handler.proc_obs = img_handler.proc_obs;
 
@@ -274,34 +284,36 @@ public:
 
             double dtic = Time::now();
 
+            //perform the projection
             if (!complexProjection(si_cad, camera_pose, state, proj_rgb)) {
                 yError() << "Could not perform projection";
                 return;
             }
 
+            //extract RoIs
             img_handler.set_projection_rois(proj_rgb);
+
+            //and copy them also for the observation
             img_handler.set_obs_rois_from_projected();
             warp_handler.scale = img_handler.scale;
             //warp_handler.extract_rois(proj_rgb);
+
+            //make the projection template
+            img_handler.setProcProj(proj_rgb);
+            warp_handler.projection.img_warp = img_handler.proc_proj;
             double dtoc_proj = Time::now();
             
-            img_handler.setProcProj(proj_rgb);
-            //proj_32f = warp_handler.extract_projection(proj_rgb);
-            //warp_handler.set_projection(proj_32f);
-            warp_handler.projection.img_warp = img_handler.proc_proj;
+            //make predictions
             warp_handler.make_predictive_warps();
             double dtoc_projproc = Time::now();
 
-            eros_handler.eros.getSurface().copyTo(eros_u);
+            //get the EROS
             dataset_time = eros_handler.tic;
-            img_handler.setProcObs(eros_u);
+            img_handler.setProcObs(eros_handler.eros.getSurface());
             warp_handler.proc_obs = img_handler.proc_obs;
-            //warp_handler.set_observation(eros_u);
             double dtoc_eros = Time::now();
 
             warp_handler.score_predictive_warps();
-            
-            
             if(step) {
                 //warp_handler.update_from_max();
                 //warp_handler.update_all_possible();
@@ -428,10 +440,13 @@ public:
         yInfo() << "waiting for eros handler ... ";
         eros_handler.stop();
         yInfo() << "waiting for worker threads ... ";
-        worker.join();
-        warp_worker.join();
-        proj_worker.join();
-
+        if(parallel_method) {
+            warp_worker.join();
+            proj_worker.join();
+        } else {
+            worker.join();
+        }
+            
         if(fs.is_open())
         {
             yInfo() << "Writing data ...";
