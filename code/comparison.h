@@ -19,7 +19,8 @@ public:
 
     //internal definitions
     enum cam_param_name{w,h,cx,cy,fx,fy};
-    enum warp_name{xp, yp, zp, ap, bp, cp, xn, yn, zn, an, bn, cn};
+    enum warp_name{xp, yp, zp, ap, bp, cp, xn, yn, zn, an, bn, cn,
+                   xp2, yp2, zp2, ap2, bp2, cp2, xn2, yn2, zn2, an2, bn2, cn2};
     enum axis_name{x=0,y=1,z=2,a=3,b=4,c=5};
     typedef struct warp_bundle
     {
@@ -35,7 +36,6 @@ public:
 
     //fixed parameters to set
     std::array<double, 6> cam;
-    double dp{2};
     cv::Size proc_size{cv::Size(100, 100)};
 
     //parameters that must be udpated externally
@@ -44,8 +44,12 @@ public:
 
     //internal variables
     warp_bundle projection;
-    std::array<warp_bundle, 12> warps;
+    std::array<warp_bundle, 24> warps;
     std::deque<const warp_bundle *> warp_history;
+    cv::Mat prmx{cv::Mat::zeros(proc_size, CV_32F)};
+    cv::Mat prmy{cv::Mat::zeros(proc_size, CV_32F)};
+    cv::Mat nrmx{cv::Mat::zeros(proc_size, CV_32F)};
+    cv::Mat nrmy{cv::Mat::zeros(proc_size, CV_32F)};
 
     //output
     std::array<double, 7> state_current;
@@ -71,22 +75,17 @@ public:
         warps[ap].active = warps[an].active = true; 
         warps[bp].active = warps[bn].active = true; 
         warps[cp].active = warps[cn].active = true;
+
+        warps[xp2].active = warps[xn2].active = true; 
+        warps[yp2].active = warps[yn2].active = true; 
+        warps[zp2].active = warps[zn2].active = true; 
+        warps[ap2].active = warps[an2].active = true; 
+        warps[bp2].active = warps[bn2].active = true; 
+        warps[cp2].active = warps[cn2].active = true;
     }
 
-    void create_Ms(double dp)
+    void create_m_x(double dp, warp_name p, warp_name n)
     {
-        //variable set-up
-        this->dp = dp;
-        double theta = 0;
-
-        double cy = proc_size.height * 0.5;
-        double cx = proc_size.width  * 0.5;
-
-        cv::Mat prmx = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat prmy = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat nrmx = cv::Mat::zeros(proc_size, CV_32F);
-        cv::Mat nrmy = cv::Mat::zeros(proc_size, CV_32F);
-
         //x shift by dp
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
@@ -98,12 +97,14 @@ public:
                 nrmy.at<float>(y, x) = y;
             }
         }
-        cv::convertMaps(prmx, prmy, warps[xp].rmp, warps[xp].rmsp, CV_16SC2);
-        cv::convertMaps(nrmx, nrmy, warps[xn].rmp, warps[xn].rmsp, CV_16SC2);
-        warps[xp].axis = x; warps[xn].axis = x;
-        warps[xp].delta = dp; warps[xn].delta = -dp;
+        cv::convertMaps(prmx, prmy, warps[p].rmp, warps[p].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[n].rmp, warps[n].rmsp, CV_16SC2);
+        warps[p].axis = x; warps[n].axis = x;
+        warps[p].delta = dp; warps[n].delta = -dp;
+    }
 
-        //y shift by dp
+    void create_m_y(double dp, warp_name p, warp_name n)
+    {
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
                 //positive
@@ -114,15 +115,16 @@ public:
                 nrmy.at<float>(y, x) = y+dp;
             }
         }
-        cv::convertMaps(prmx, prmy, warps[yp].rmp, warps[yp].rmsp, CV_16SC2);
-        cv::convertMaps(nrmx, nrmy, warps[yn].rmp, warps[yn].rmsp, CV_16SC2);
-        warps[yp].axis = y; warps[yn].axis = y;
-        warps[yp].delta = dp; warps[yn].delta = -dp;
+        cv::convertMaps(prmx, prmy, warps[p].rmp, warps[p].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[n].rmp, warps[n].rmsp, CV_16SC2);
+        warps[p].axis = y; warps[n].axis = y;
+        warps[p].delta = dp; warps[n].delta = -dp;
+    }
 
-        //z we use a scaling matrix
-        //this should have the centre in the image centre (not object centre)
-        //but that requires recomputing M for each different position in the image
-        //for computation we are making this assumption. could be improved.
+    void create_m_z(double dp, warp_name p, warp_name n)
+    {
+        double cy = proc_size.height * 0.5;
+        double cx = proc_size.width  * 0.5;
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
                 double dx = -(x-cx) * dp / proc_size.width;
@@ -135,14 +137,61 @@ public:
                 nrmy.at<float>(y, x) = y + dy;
             }
         }
-        cv::convertMaps(prmx, prmy, warps[zp].rmp, warps[zp].rmsp, CV_16SC2);
-        cv::convertMaps(nrmx, nrmy, warps[zn].rmp, warps[zn].rmsp, CV_16SC2);
-        warps[zp].axis = z; warps[zn].axis = z;
-        warps[zp].delta = dp / proc_size.width; 
-        warps[zn].delta = -dp / proc_size.width;
+        cv::convertMaps(prmx, prmy, warps[p].rmp, warps[p].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[n].rmp, warps[n].rmsp, CV_16SC2);
+        warps[p].axis = z; warps[n].axis = z;
+        warps[p].delta = dp / proc_size.width; 
+        warps[n].delta = -dp / proc_size.width;
+    }
+
+    void create_m_a(double dp, warp_name p, warp_name n)
+    {
+        double cy = proc_size.height * 0.5;
+        double cx = proc_size.width  * 0.5;
+        double theta = atan2(dp, proc_size.height * 0.5);
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                double dy = dp * cos(0.5 * M_PI * (y - cy) / (proc_size.height * 0.5));
+                //positive
+                prmx.at<float>(y, x) = x;
+                prmy.at<float>(y, x) = y - dy;
+                //negative
+                nrmx.at<float>(y, x) = x;
+                nrmy.at<float>(y, x) = y + dy;
+            }
+        }
+        cv::convertMaps(prmx, prmy, warps[p].rmp, warps[p].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[n].rmp, warps[n].rmsp, CV_16SC2);
+        warps[p].axis = a; warps[n].axis = a;
+        warps[p].delta = theta; warps[n].delta = -theta;
+    }
+
+    void create_m_b(double dp, warp_name p, warp_name n)
+    {
         
-        //roll by 2 pixels at proc_width/2 distance
-        theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);
+        double theta = atan2(dp, proc_size.width * 0.5);
+        for(int x = 0; x < proc_size.width; x++) {
+            for(int y = 0; y < proc_size.height; y++) {
+                double dx = -dp * cos(0.5 * M_PI * (x - cx) / (proc_size.width * 0.5));
+                //positive
+                prmx.at<float>(y, x) = x - dx;
+                prmy.at<float>(y, x) = y;
+                //negative
+                nrmx.at<float>(y, x) = x + dx;
+                nrmy.at<float>(y, x) = y;
+            }
+        }
+        cv::convertMaps(prmx, prmy, warps[p].rmp, warps[p].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[n].rmp, warps[n].rmsp, CV_16SC2);
+        warps[p].axis = b; warps[n].axis = b;
+        warps[p].delta = theta; warps[n].delta = -theta;
+    }
+
+    void create_m_c(double dp, warp_name p, warp_name n)
+    {
+        double cy = proc_size.height * 0.5;
+        double cx = proc_size.width  * 0.5;
+        double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
                 double dx = -(y - cy) * cam[fx] / cam[fy] * theta;
@@ -155,47 +204,27 @@ public:
                 nrmy.at<float>(y, x) = y + dy;
             }
         }
-        cv::convertMaps(prmx, prmy, warps[cp].rmp, warps[cp].rmsp, CV_16SC2);
-        cv::convertMaps(nrmx, nrmy, warps[cn].rmp, warps[cn].rmsp, CV_16SC2);
-        warps[cp].axis = c; warps[cn].axis = c;
-        warps[cp].delta = theta; warps[cn].delta = -theta;
+        cv::convertMaps(prmx, prmy, warps[p].rmp, warps[p].rmsp, CV_16SC2);
+        cv::convertMaps(nrmx, nrmy, warps[n].rmp, warps[n].rmsp, CV_16SC2);
+        warps[p].axis = c; warps[n].axis = c;
+        warps[p].delta = theta; warps[n].delta = -theta;
+    }
 
-        //yaw assuming a sphere the size of the proc_width
-        theta = atan2(dp, proc_size.width * 0.5);
-        for(int x = 0; x < proc_size.width; x++) {
-            for(int y = 0; y < proc_size.height; y++) {
-                double dx = -dp * cos(0.5 * M_PI * (x - cx) / (proc_size.width * 0.5));
-                //positive
-                prmx.at<float>(y, x) = x - dx;
-                prmy.at<float>(y, x) = y;
-                //negative
-                nrmx.at<float>(y, x) = x + dx;
-                nrmy.at<float>(y, x) = y;
-            }
-        }
-        cv::convertMaps(prmx, prmy, warps[bp].rmp, warps[bp].rmsp, CV_16SC2);
-        cv::convertMaps(nrmx, nrmy, warps[bn].rmp, warps[bn].rmsp, CV_16SC2);
-        warps[bp].axis = b; warps[bn].axis = b;
-        warps[bp].delta = theta; warps[bn].delta = -theta;
-        
+    void create_Ms(double dp)
+    {
+        create_m_x(dp, xp, xn);
+        create_m_y(dp, yp, yn);
+        create_m_z(dp, zp, zn);
+        create_m_a(dp, ap, an);
+        create_m_b(dp, bp, bn);
+        create_m_c(dp, cp, cn);
 
-        //pitch assuming the object is a sphere the size of proc_height
-        theta = atan2(dp, proc_size.height * 0.5);
-        for(int x = 0; x < proc_size.width; x++) {
-            for(int y = 0; y < proc_size.height; y++) {
-                double dy = dp * cos(0.5 * M_PI * (y - cy) / (proc_size.height * 0.5));
-                //positive
-                prmx.at<float>(y, x) = x;
-                prmy.at<float>(y, x) = y - dy;
-                //negative
-                nrmx.at<float>(y, x) = x;
-                nrmy.at<float>(y, x) = y + dy;
-            }
-        }
-        cv::convertMaps(prmx, prmy, warps[ap].rmp, warps[ap].rmsp, CV_16SC2);
-        cv::convertMaps(nrmx, nrmy, warps[an].rmp, warps[an].rmsp, CV_16SC2);
-        warps[ap].axis = a; warps[an].axis = a;
-        warps[ap].delta = theta; warps[an].delta = -theta;
+        create_m_x(dp*2, xp2, xn2);
+        create_m_y(dp*2, yp2, yn2);
+        create_m_z(dp*2, zp2, zn2);
+        create_m_a(dp*2, ap2, an2);
+        create_m_b(dp*2, bp2, bn2);
+        create_m_c(dp*2, cp2, cn2);
     }
 
     void set_current(const std::array<double, 7> &state)
@@ -281,47 +310,43 @@ public:
         //best of x axis and roation around y (yaw)
         warp_bundle *best;
         best = &projection;
-        if (warps[xp].score > best->score)
-            best = &warps[xp];
-        if (warps[xn].score > best->score)
-            best = &warps[xn];
-        if (warps[bp].score > best->score)
-            best = &warps[bp];
-        if (warps[bn].score > best->score)
-            best = &warps[bn];
-        if(best->score > projection.score)
-            update_state(*best);
+        if (warps[xp].score > best->score) best = &warps[xp];
+        if (warps[xn].score > best->score) best = &warps[xn];
+        if (warps[bp].score > best->score) best = &warps[bp];
+        if (warps[bn].score > best->score) best = &warps[bn];
+        if (warps[xp2].score > best->score) best = &warps[xp2];
+        if (warps[xn2].score > best->score) best = &warps[xn2];
+        if (warps[bp2].score > best->score) best = &warps[bp2];
+        if (warps[bn2].score > best->score) best = &warps[bn2];
+        if(best != &projection) update_state(*best);
 
         //best of y axis and rotation around x (pitch)
         best = &projection;
-        if (warps[yp].score > best->score)
-            best = &warps[yp];
-        if (warps[yn].score > best->score)
-            best = &warps[yn];
-        if (warps[ap].score > best->score)
-            best = &warps[ap];
-        if (warps[an].score > best->score)
-            best = &warps[an];
-        if(best->score > projection.score)
-            update_state(*best);
+        if (warps[yp].score > best->score) best = &warps[yp];
+        if (warps[yn].score > best->score) best = &warps[yn];
+        if (warps[ap].score > best->score) best = &warps[ap];
+        if (warps[an].score > best->score) best = &warps[an];
+        if (warps[yp2].score > best->score) best = &warps[yp2];
+        if (warps[yn2].score > best->score) best = &warps[yn2];
+        if (warps[ap2].score > best->score) best = &warps[ap2];
+        if (warps[an2].score > best->score) best = &warps[an2];
+        if(best != &projection) update_state(*best);
 
         //best of roll
         best = &projection;
-        if (warps[cp].score > best->score)
-            best = &warps[cp];
-        if (warps[cn].score > best->score)
-            best = &warps[cn];
-        if(best->score > projection.score)
-            update_state(*best);
+        if (warps[cp].score > best->score) best = &warps[cp];
+        if (warps[cn].score > best->score) best = &warps[cn];
+        if (warps[cp2].score > best->score) best = &warps[cp2];
+        if (warps[cn2].score > best->score) best = &warps[cn2];
+        if(best != &projection) update_state(*best);
 
         //best of z
         best = &projection;
-        if (warps[zp].score > best->score)
-            best = &warps[zp];
-        if (warps[zn].score > best->score)
-            best = &warps[zn];
-        if(best->score > projection.score) 
-            update_state(*best);
+        if (warps[zp].score > best->score) best = &warps[zp];
+        if (warps[zn].score > best->score) best = &warps[zn];
+        if (warps[zp2].score > best->score) best = &warps[zp2];
+        if (warps[zn2].score > best->score) best = &warps[zn2];
+        if(best != &projection) update_state(*best);
 
         return warp_history.size() > prev_history_length;
     }

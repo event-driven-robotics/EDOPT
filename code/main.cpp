@@ -275,9 +275,9 @@ public:
                 //step = true;
             }
             warp_count++;
-
-
         }
+        projection_available = false;
+        signal.notify_one();
     }
 
     void sequential_loop()
