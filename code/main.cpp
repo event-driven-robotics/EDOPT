@@ -23,6 +23,7 @@ private:
     std::thread proj_worker;
     std::thread warp_worker;
     std::mutex m;
+    std::condition_variable signal;
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
 
@@ -217,6 +218,8 @@ public:
     {
         while (!isStopping()) 
         {
+            std::unique_lock<std::mutex> lk(m);
+            signal.wait(lk, [this]{return projection_available == false;});
             // project the current state
             complexProjection(si_cad, camera_pose, warp_handler.state_current, proj_rgb);
 
@@ -236,8 +239,6 @@ public:
         {
             if(projection_available) 
             {
-                updated = true;
-                projection_available = false;
                 // set the current image
                 img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
 
@@ -248,6 +249,10 @@ public:
                 // copy over the region of interest (needs to be thread safe)
                 img_handler.set_obs_rois_from_projected();
                 warp_handler.scale = img_handler.scale;
+
+                updated = true;
+                projection_available = false;
+                signal.notify_one();
             }
 
             // perform warps
