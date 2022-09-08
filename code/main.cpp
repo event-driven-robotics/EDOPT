@@ -19,39 +19,45 @@ class tracker : public yarp::os::RFModule
 {
 private:
 
+    //parameters
+    int proc_size{100};
+    int canny_thresh{40}; double canny_scale{3.0};
+    int eros_k{7}; double eros_d{0.7};
+    bool dp2{false};
+    bool parallel_method;
+    bool run{true};
+    double period{0.1};
+
+    //threads and mutex, handlers
     std::thread worker;
     std::thread proj_worker;
     std::thread warp_worker;
     std::mutex m;
     std::condition_variable signal;
+
+    //handlers
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
-
     imageProcessing img_handler;
+    warpManager warp_handler;
 
-    cv::Size img_size;
-
-    predictions warp_handler;
-    std::array<double, 6> intrinsics;
-
-    //std::array<double, 7> default_state = {0, 0, 0.92, 0, 0, 0.7071068, 0.7071068};
-    std::array<double, 7> initial_state, camera_pose, state;
-    std::deque< std::array<double, 8> > data_to_save;
-
+    //internal variables
     SICAD* si_cad;
-
-    cv::Mat proj_rgb, eros_u, proj_32f;
-    double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
-    int toc_count{0};
-    bool step{false};
-    double period{0.1};
-
-    int proj_count{0}, warp_count{0};
+    cv::Size img_size;
+    std::array<double, 6> intrinsics;
+    std::array<double, 7> initial_state, camera_pose, state;
+    cv::Mat proj_rgb, proj_32f;
     bool projection_available{false};
 
+    //stats
+    double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
+    int toc_count{0};
+    int proj_count{0}, warp_count{0};
+
+    //output
     std::ofstream fs;
     std::string file_name;
-    bool parallel_method;
+    std::deque< std::array<double, 8> > data_to_save;
 
 public:
 
@@ -61,33 +67,39 @@ public:
         double bias_sens = rf.check("s", Value(0.6)).asFloat64();
         double cam_filter = rf.check("f", Value(0.1)).asFloat64();
 
-        parallel_method = rf.check("parallel", Value(false)).asBool();
-
+        proc_size = rf.check("proc_size", Value(100)).asInt32();
+        canny_thresh = rf.check("canny_thresh", Value(40)).asInt32();
+        canny_scale = rf.check("canny_scale", Value(3)).asFloat64();
+        eros_k = rf.check("eros_k", Value(7)).asInt32();
+        eros_d = rf.check("eros_d", Value(0.7)).asFloat64();
+        period = rf.check("period", Value(0.1)).asFloat64();
+        dp2 = rf.check("dp2") && rf.check("dp2", Value(true)).asBool(); //default false
+        run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
+        parallel_method = rf.check("parallel") && rf.check("parallel", Value(true)).asBool(); // defaulat false
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
             yError() << "Wrong .ini file or [CAMERA_CALIBRATION] not present. Deal breaker.";
             return false;
         }
-
-        intrinsics[0] = intrinsic_parameters.find("w").asInt32();
-        intrinsics[1] = intrinsic_parameters.find("h").asInt32();
-        intrinsics[2] = intrinsic_parameters.find("cx").asFloat32();
-        intrinsics[3] = intrinsic_parameters.find("cy").asFloat32();
-        intrinsics[4] = intrinsic_parameters.find("fx").asFloat32();
-        intrinsics[5] = intrinsic_parameters.find("fy").asFloat32();
+        warp_handler.cam[warpManager::x] = intrinsic_parameters.find("w").asInt32();
+        warp_handler.cam[warpManager::y] = intrinsic_parameters.find("h").asInt32();
+        warp_handler.cam[warpManager::cx] = intrinsic_parameters.find("cx").asFloat32();
+        warp_handler.cam[warpManager::cy] = intrinsic_parameters.find("cy").asFloat32();
+        warp_handler.cam[warpManager::fx] = intrinsic_parameters.find("fx").asFloat32();
+        warp_handler.cam[warpManager::fy] = intrinsic_parameters.find("fy").asFloat32();
+        img_size = cv::Size(warp_handler.cam[warpManager::x], warp_handler.cam[warpManager::y]);
 
         if(!loadPose(rf, "object_pose", initial_state)) return false;
         if(!loadPose(rf, "camera_pose", camera_pose)) return false;
         state = initial_state;
-        img_size = cv::Size(intrinsics[0], intrinsics[1]);
-
+        
         if(!Network::checkNetwork(1.0)) {
             yError() << "could not connect to YARP";
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"))) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -96,35 +108,19 @@ public:
         if(!si_cad)
             return false;
 
-        // if(!eros_handler.start(bias_sens, cam_filter)) 
-        // {
-        //     return false;
-        // }
-
-        // if(img_size.width != intrinsics[0] || img_size.height != intrinsics[1]) 
-        // {
-        //     yError() << "Provided camera parameters don't match data";
-        //     return false;
-        // }
-
-        
-
-        int rescale_size = 100;
-        int blur = rescale_size / 20;
+        int blur = proc_size / 20;
         double dp =  1;//+rescale_size / 100;
-        warp_handler.initialise(intrinsics, rescale_size);
+        warp_handler.initialise(proc_size, dp2);
         warp_handler.create_Ms(dp);
         warp_handler.set_current(state);
+        img_handler.initialise(proc_size, blur, canny_thresh, canny_scale);
 
-        img_handler.initialise(rescale_size, blur);
+        proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        proj_32f = cv::Mat::zeros(img_size, CV_32F);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", img_size);
         cv::moveWindow("EROS", 0, 0);
-
-        eros_u = cv::Mat::zeros(img_size, CV_8U);
-        proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
-        proj_32f = cv::Mat::zeros(img_size, CV_32F);
 
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
@@ -144,7 +140,6 @@ public:
             worker = std::thread([this]{sequential_loop();});
         }
         
-
         if (rf.check("file")) {
             fs.open(rf.find("file").asString());
             if (!fs.is_open()) {
@@ -153,6 +148,16 @@ public:
                 return false;
             }
         }
+
+        yInfo() << "====== Configuration ======";
+        yInfo() << "Camera Size:" << img_size.width << "x" << img_size.height;
+        yInfo() << "Process re-sized:" << proc_size << "x" << proc_size << "(--proc_size <int>)";
+        yInfo() << "EROS:" << eros_k << "," << eros_d << "(--eros_k <int> --eros_d <float>)";
+        yInfo() << "Canny:" << canny_thresh << "," << canny_thresh<<"x"<<canny_scale << "(--canny_thresh <int> --canny_scale <float>)";
+        if(dp2){yInfo()<<"ON: multi-size dp warps (--dp2)";}else{yInfo()<<"OFF: multi-size dp warps (--dp2)";}
+        if(parallel_method){yInfo()<<"ON: threaded projections (--parallel)";}else{yInfo()<<"OFF: threaded projections (--parallel)";}
+        if(!run) yInfo() << "WARNING: press G to start tracking (--run)";
+        yInfo() << "===========================";
 
         return true;
     }
@@ -181,7 +186,7 @@ public:
         if (c == 32)
             warp_handler.set_current(initial_state);
         if (c == 'g')
-            step = true;
+            run = true;
         if(c == 27) {
             stopModule();
             return false;
@@ -198,18 +203,20 @@ public:
 
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
-
-        if (toc_count) {
-            yInfo() << (int)(toc_eros / toc_count) << "\t"
-                    << (int)(toc_proj / toc_count) << "\t"
-                    << (int)(toc_projproc / toc_count) << "\t"
-                    << (int)(toc_warp / toc_count) << "\t"
-                    << (int) toc_count / period << "Hz";
-            toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
-        }
-        if(warp_count || proj_count) {
-            yInfo() << (int)(warp_count/period) << "Hz" << (int)(proj_count/period) << "Hz";
-            warp_count = proj_count = 0;
+        static int updated_divisor=0;
+        if (updated_divisor++ % 10 == 0) {
+            if (toc_count) {
+                yInfo() << (int)(toc_eros / toc_count) << "\t"
+                        << (int)(toc_proj / toc_count) << "\t"
+                        << (int)(toc_projproc / toc_count) << "\t"
+                        << (int)(toc_warp / toc_count) << "\t"
+                        << (int)toc_count / (period*10) << "Hz";
+                toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
+            }
+            if (warp_count || proj_count) {
+                yInfo() << (int)(warp_count / (period*10)) << "Hz" << (int)(proj_count / (10*period)) << "Hz";
+                warp_count = proj_count = 0;
+            }
         }
          return true;
     }
@@ -267,7 +274,7 @@ public:
             warp_handler.score_predictive_warps();
 
             // update the state and update the warped image projection
-            if (step) {
+            if (run) {
                 // warp_handler.update_from_max();
                 // warp_handler.update_all_possible();
                 updated = warp_handler.update_heuristically();
@@ -319,12 +326,11 @@ public:
             double dtoc_eros = Time::now();
 
             warp_handler.score_predictive_warps();
-            if(step) {
+            if(run) {
                 //warp_handler.update_from_max();
                 //warp_handler.update_all_possible();
                 warp_handler.update_heuristically();
                 state = warp_handler.state_current;
-                step = true;
             }
             
             double dtoc_warp = Time::now();
@@ -471,7 +477,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
-    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configCAR.ini");
+    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configDRAGON.ini");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);

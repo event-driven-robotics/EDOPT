@@ -13,7 +13,7 @@
 
 // [dx, dy, dz, dalpha, dbeta, dgamma]
 
-class predictions {
+class warpManager {
 
 public:
 
@@ -56,9 +56,8 @@ public:
 
 public:
 
-    void initialise(const std::array<double, 6> intrinsics, int size_to_process)
+    void initialise(int size_to_process, bool dp2)
     {
-        cam = intrinsics;
         proc_size = cv::Size(size_to_process, size_to_process);
 
         projection.axis = -1;
@@ -81,12 +80,14 @@ public:
         warps[bp].active = warps[bn].active = true; 
         warps[cp].active = warps[cn].active = true;
 
-        warps[xp2].active = warps[xn2].active = true; 
-        warps[yp2].active = warps[yn2].active = true; 
-        warps[zp2].active = warps[zn2].active = true; 
-        warps[ap2].active = warps[an2].active = true; 
-        warps[bp2].active = warps[bn2].active = true; 
-        warps[cp2].active = warps[cn2].active = true;
+        if (dp2) {
+            warps[xp2].active = warps[xn2].active = true;
+            warps[yp2].active = warps[yn2].active = true;
+            warps[zp2].active = warps[zn2].active = true;
+            warps[ap2].active = warps[an2].active = true;
+            warps[bp2].active = warps[bn2].active = true;
+            warps[cp2].active = warps[cn2].active = true;
+        }
     }
 
     void create_m_x(double dp, warp_name p, warp_name n)
