@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os, json
 from tqdm import tqdm
 
-dir = '../../../../data/6-DOF-Objects/synthetic/006mustard/translation_x_gt_velocity_1m_s/photorealistic1/'
+dir = '/data/dragon/dragon_translation_z_1_m_s/photorealistic1/'
 
 json_list = sorted([json_files for json_files in os.listdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), dir)) if json_files.endswith('.json')])
 
