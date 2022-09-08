@@ -46,10 +46,10 @@ public:
     warp_bundle projection;
     std::array<warp_bundle, 24> warps;
     std::deque<const warp_bundle *> warp_history;
-    cv::Mat prmx{cv::Mat::zeros(proc_size, CV_32F)};
-    cv::Mat prmy{cv::Mat::zeros(proc_size, CV_32F)};
-    cv::Mat nrmx{cv::Mat::zeros(proc_size, CV_32F)};
-    cv::Mat nrmy{cv::Mat::zeros(proc_size, CV_32F)};
+    cv::Mat prmx;
+    cv::Mat prmy;
+    cv::Mat nrmx;
+    cv::Mat nrmy;
 
     //output
     std::array<double, 7> state_current;
@@ -68,6 +68,11 @@ public:
         for(auto &warp : warps) {
             warp.img_warp = cv::Mat::zeros(proc_size, CV_32F);
         }
+
+        prmx = cv::Mat::zeros(proc_size, CV_32F);
+        prmy = cv::Mat::zeros(proc_size, CV_32F);
+        nrmx = cv::Mat::zeros(proc_size, CV_32F);
+        nrmy = cv::Mat::zeros(proc_size, CV_32F);
 
         warps[xp].active = warps[xn].active = true; 
         warps[yp].active = warps[yn].active = true; 
@@ -369,6 +374,7 @@ public:
         int col = 0; int row = 0;
 
         for(auto &warp : warps) {
+            if(!warp.active) continue;
             switch(warp.axis) {
                 case(x):
                     row = 1;
@@ -414,6 +420,7 @@ public:
         int col = 0; int row = 0;
 
         for(auto &warp : warps) {
+            if(!warp.active) continue;
             switch(warp.axis) {
                 case(b):
                     row = 1;
