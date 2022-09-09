@@ -8,6 +8,8 @@ public:
     //given parameters
     int blur{10};
     cv::Size proc_size{cv::Size(100, 100)};
+    int canny_thresh{40};
+    double canny_scale{3};
 
     //internal variables
     //for the projection
@@ -29,7 +31,7 @@ public:
         static cv::Size nblur(2*blur-1, 2*blur-1);
         static double minval, maxval;
         
-        cv::Canny(input, canny_img, 40, 40 * 3, 3);
+        cv::Canny(input, canny_img, canny_thresh, canny_thresh*canny_scale, 3);
         canny_img.convertTo(f, CV_32F);
 
         cv::GaussianBlur(f, pos_hat, pblur, 0);
@@ -49,8 +51,10 @@ public:
 
 public:
 
-    void initialise(int process_size, int blur_size)
+    void initialise(int process_size, int blur_size, int canny_thresh, double canny_scale)
     {
+        this->canny_thresh = canny_thresh;
+        this->canny_scale = canny_scale;
         blur = blur_size % 2 ? blur_size : blur_size + 1;
         proc_size = cv::Size(process_size, process_size);
         proc_proj = cv::Mat(proc_size, CV_32F);
