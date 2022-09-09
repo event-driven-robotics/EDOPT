@@ -99,7 +99,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
+        if (!eros_handler.start(img_size, "/atis3/AEf:o", getName("/AE:i"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -108,8 +108,8 @@ public:
         if(!si_cad)
             return false;
 
-        int blur = proc_size / 20;
-        double dp =  1;//+rescale_size / 100;
+        int blur = proc_size / 10;
+        double dp = 1;//+rescale_size / 100;
         warp_handler.initialise(proc_size, dp2);
         warp_handler.create_Ms(dp);
         warp_handler.set_current(state);
@@ -161,6 +161,8 @@ public:
 
         return true;
     }
+
+
 
     double getPeriod() override
     {
@@ -278,6 +280,7 @@ public:
                 // warp_handler.update_from_max();
                 // warp_handler.update_all_possible();
                 updated = warp_handler.update_heuristically();
+                //updated = warp_handler.update_from_max();
                 // state = warp_handler.state_current;
                 //step = true;
             }
@@ -312,11 +315,13 @@ public:
 
             //make the projection template
             img_handler.setProcProj(proj_rgb);
-            warp_handler.projection.img_warp = img_handler.proc_proj;
+            img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+            //warp_handler.projection.img_warp = img_handler.proc_proj;
             double dtoc_proj = Time::now();
             
             //make predictions
             warp_handler.make_predictive_warps();
+            replaceyawpitch(img_handler.img_roi);
             double dtoc_projproc = Time::now();
 
             //get the EROS
@@ -345,6 +350,45 @@ public:
                 data_to_save.push_back({dataset_time, state[0], state[1], state[2], state[3], state[4], state[5], state[6]});
             }
         }
+    }
+
+    void replaceyawpitch(cv::Rect roi)
+    {
+        static cv::Mat rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        rgb = 0;
+        cv::Mat rgb_roi = rgb(roi);
+        //get the state change for delta pitch (around x axis)
+
+        double theta = M_PI_2 * 10.0 / (roi.height*0.5);
+        auto state_temp = state;
+        perform_rotation(state_temp, 0, theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        //complexProjection(si_cad, camera_pose, state_temp, rgb);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::ap].img_warp);
+        warp_handler.warps[warpManager::ap].delta = theta;
+
+        state_temp = state;
+        perform_rotation(state_temp, 0, -theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::an].img_warp);
+        warp_handler.warps[warpManager::an].delta = -theta;
+
+        state_temp = state;
+        perform_rotation(state_temp, 1, theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::bp].img_warp);
+        warp_handler.warps[warpManager::bp].delta = theta;
+
+        state_temp = state;
+        perform_rotation(state_temp, 1, -theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::bn].img_warp);
+        warp_handler.warps[warpManager::bn].delta = -theta;
+
     }
 
     bool quaternion_test(bool return_value = true)

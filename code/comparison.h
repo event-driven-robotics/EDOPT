@@ -152,12 +152,15 @@ public:
 
     void create_m_a(double dp, warp_name p, warp_name n)
     {
+        //dp *= 0.5;
+        //dp *= 2;
+        dp *= 10;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
-        double theta = atan2(dp, proc_size.height * 0.5);
+        double theta = M_PI_2 * dp / (proc_size.height * 0.5);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
-                double dy = dp * cos(0.5 * M_PI * (y - cy) / (proc_size.height * 0.5));
+                double dy = -dp * cos(0.5 * M_PI * (y - cy) / (proc_size.height * 0.5));
                 //positive
                 prmx.at<float>(y, x) = x;
                 prmy.at<float>(y, x) = y - dy;
@@ -174,8 +177,12 @@ public:
 
     void create_m_b(double dp, warp_name p, warp_name n)
     {
+        //dp *= 0.4;
+        dp *= 10;
+        double cy = proc_size.height * 0.5;
+        double cx = proc_size.width  * 0.5;
+        double theta = M_PI_2 * dp / (proc_size.width * 0.5);
         
-        double theta = atan2(dp, proc_size.width * 0.5);
         for(int x = 0; x < proc_size.width; x++) {
             for(int y = 0; y < proc_size.height; y++) {
                 double dx = -dp * cos(0.5 * M_PI * (x - cx) / (proc_size.width * 0.5));
@@ -195,6 +202,7 @@ public:
 
     void create_m_c(double dp, warp_name p, warp_name n)
     {
+        //dp *= 0.4;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);
@@ -240,9 +248,11 @@ public:
 
     void make_predictive_warps()
     {
-        for(auto &warp : warps)
+        for(auto &warp : warps) {
+            //if(warp.axis == a || warp.axis == b) continue;
             if(warp.active)
                 cv::remap(projection.img_warp, warp.img_warp, warp.rmp, warp.rmsp, cv::INTER_LINEAR);
+        }
     }
 
     void warp_by_history(cv::Mat &image)
@@ -268,6 +278,7 @@ public:
 
     void update_state(const warp_bundle &best)
     {
+        double theta;
         double d = fabs(state_current[z]);
         switch(best.axis) {
             case(x):
@@ -293,21 +304,27 @@ public:
         warp_history.push_back(&best);
     }
 
-    void update_all_possible()
+    bool update_all_possible()
     {
+        int prev_history_length = warp_history.size();
         for(auto &warp : warps)
             if(warp.score > projection.score)
                 update_state(warp);
+        return warp_history.size() > prev_history_length;
     }
 
-    void update_from_max()
+    bool update_from_max()
     {
         warp_bundle *best = &projection;
         for(auto &warp : warps)
             if(warp.score > best->score)
                 best = &warp;
 
-        update_state(*best);
+        if(best != &projection) {
+            update_state(*best);
+            return true;
+        }
+        return false;
     }
 
     bool update_heuristically()

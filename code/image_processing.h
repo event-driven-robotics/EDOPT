@@ -44,7 +44,7 @@ public:
 
     void process_eros(const cv::Mat &input, cv::Mat &output) {
         static cv::Mat eros_blurred, eros_f;
-        cv::GaussianBlur(input, eros_blurred, cv::Size(5, 5), 0);
+        cv::GaussianBlur(input, eros_blurred, cv::Size(7, 7), 0);
         eros_blurred.convertTo(output, CV_32F, 0.003921569);
         //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
     }
