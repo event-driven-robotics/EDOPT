@@ -2,6 +2,7 @@
 
 #include <SuperimposeMesh/SICAD.h>
 #include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
 #include <mutex>
 
 #include <yarp/os/all.h>
@@ -36,7 +37,7 @@ private:
     std::condition_variable signal;
 
     //handlers
-    //EROSdirect eros_handler;
+    //EROSdirect eros_handler;>
     EROSfromYARP eros_handler;
     imageProcessing img_handler;
     warpManager warp_handler;
@@ -58,6 +59,7 @@ private:
     std::ofstream fs;
     std::string file_name;
     std::deque< std::array<double, 8> > data_to_save;
+    cv::VideoWriter vid_writer;
 
 public:
 
@@ -141,13 +143,19 @@ public:
         }
         
         if (rf.check("file")) {
-            fs.open(rf.find("file").asString());
+            std::string filename = rf.find("file").asString();
+            fs.open(filename);
             if (!fs.is_open()) {
-                yError() << "Could not open output file"
-                         << rf.find("file").asString();
+                yError() << "Could not open output file" << filename;
+                return false;
+            }
+            vid_writer.open(filename + ".mp4", cv::VideoWriter::fourcc('H','2','6','4'), (int)(1.0/period), img_size, true);
+            if (!vid_writer.isOpened()) {
+                yError() << "Could not open output file" << filename << ".mp4";
                 return false;
             }
         }
+
 
         yInfo() << "====== Configuration ======";
         yInfo() << "Camera Size:" << img_size.width << "x" << img_size.height;
@@ -184,6 +192,7 @@ public:
         cv::imshow("EROS", vis);
         cv::imshow("Translations", warps_t+0.5);
         cv::imshow("Rotations", warps_r+0.5);
+        
         int c = cv::waitKey(1);
         if (c == 32)
             warp_handler.set_current(initial_state);
@@ -205,6 +214,8 @@ public:
 
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
+        if(vid_writer.isOpened() && eros_handler.tic > 0)
+            vid_writer << vis;
         static int updated_divisor=0;
         if (updated_divisor++ % 10 == 0) {
             if (toc_count) {
@@ -501,7 +512,8 @@ public:
         } else {
             worker.join();
         }
-            
+        if(vid_writer.isOpened())
+            vid_writer.release();
         if(fs.is_open())
         {
             yInfo() << "Writing data ...";
