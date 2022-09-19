@@ -1670,14 +1670,14 @@ potted_ekom_position_errors = np.concatenate((potted_ekom_error_trans_x, potted_
 potted_ekom_rotation_errors = np.concatenate((potted_ekom_q_angle_trans_x, potted_ekom_q_angle_trans_y, potted_ekom_q_angle_trans_z, potted_ekom_q_angle_roll, potted_ekom_q_angle_pitch, potted_ekom_q_angle_yaw))
 
 
-labels = ['dragon', 'jell-o', 'bottle', 'soup can', 'spam']
+labels = ['O5', 'O4', 'O3', 'O2', 'O1']
 ticks=[0, 1, 2, 3, 4]
 medianprops = dict(color='white')
 
 rad_to_deg = 180/math.pi
 
-all_objects_position_errors = [dragon_ekom_position_errors, gelatin_ekom_position_errors, mustard_ekom_position_errors, tomato_ekom_position_errors, potted_ekom_position_errors]
-all_objects_rotation_errors = [dragon_ekom_rotation_errors*rad_to_deg, gelatin_ekom_rotation_errors*rad_to_deg, mustard_ekom_rotation_errors*rad_to_deg, tomato_ekom_rotation_errors*rad_to_deg, potted_ekom_rotation_errors*rad_to_deg]
+all_objects_position_errors = [potted_ekom_position_errors, tomato_ekom_position_errors, mustard_ekom_position_errors, gelatin_ekom_position_errors, dragon_ekom_position_errors]
+all_objects_rotation_errors = [potted_ekom_rotation_errors*rad_to_deg, tomato_ekom_rotation_errors*rad_to_deg, mustard_ekom_rotation_errors*rad_to_deg, gelatin_ekom_rotation_errors*rad_to_deg, dragon_ekom_rotation_errors*rad_to_deg]
 # new_quart_array = np.array(quart_vec_pos).transpose
 
 fig15, ax1 = plt.subplots(1,2)
