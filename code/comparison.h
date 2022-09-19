@@ -152,7 +152,7 @@ public:
 
     void create_m_a(double dp, warp_name p, warp_name n)
     {
-        //dp *= 10;
+        dp *= 0.1;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = M_PI_2 * dp / (proc_size.height * 0.5);
@@ -175,7 +175,7 @@ public:
 
     void create_m_b(double dp, warp_name p, warp_name n)
     {
-        //dp *= 10;
+        dp *= 0.1;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = M_PI_2 * dp / (proc_size.width * 0.5);
@@ -199,7 +199,7 @@ public:
 
     void create_m_c(double dp, warp_name p, warp_name n)
     {
-        //dp *= 0.4;
+        dp *= 0.1;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);

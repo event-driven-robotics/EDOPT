@@ -101,7 +101,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:if"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -117,7 +117,7 @@ public:
         warp_handler.set_current(state);
         img_handler.initialise(proc_size, blur, canny_thresh, canny_scale);
 
-        proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        proj_rgb = cv::Mat::zeros(img_size, CV_8UC1);
         proj_32f = cv::Mat::zeros(img_size, CV_32F);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
@@ -181,9 +181,10 @@ public:
     {
         static cv::Mat vis, proj_vis, eros_vis;
         //vis = warp_handler.make_visualisation(eros_u);
-        proj_rgb.copyTo(proj_vis);
+        //proj_rgb.copyTo(proj_vis);
         cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
-        vis = proj_rgb*0.5 + eros_vis*0.5;
+        cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
+        vis = proj_vis + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
@@ -365,7 +366,7 @@ public:
 
     void replaceyawpitch(cv::Rect roi)
     {
-        static cv::Mat rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        static cv::Mat rgb = cv::Mat::zeros(img_size, CV_8UC1);
         rgb = 0;
         cv::Mat rgb_roi = rgb(roi);
         //get the state change for delta pitch (around x axis)
