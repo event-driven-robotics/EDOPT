@@ -44,7 +44,7 @@ public:
 
     void process_eros(const cv::Mat &input, cv::Mat &output) {
         static cv::Mat eros_blurred, eros_f;
-        cv::GaussianBlur(input, eros_blurred, cv::Size(5, 5), 0);
+        cv::GaussianBlur(input, eros_blurred, cv::Size(7, 7), 0);
         eros_blurred.convertTo(output, CV_32F, 0.003921569);
         //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
     }
@@ -67,11 +67,11 @@ public:
         static cv::Rect full_roi = cv::Rect(cv::Point(0, 0), projected.size());
 
         // convert to grey
-        static cv::Mat grey;
-        cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
+        // static cv::Mat grey;
+        // cv::cvtColor(projected, grey, cv::COLOR_BGR2GRAY);
 
         // find the bounding rectangle and add some buffer
-        img_roi = cv::boundingRect(grey);
+        img_roi = cv::boundingRect(projected);
         img_roi.x -= buffer;
         img_roi.y -= buffer;
         img_roi.width += buffer * 2;
@@ -111,7 +111,7 @@ public:
     void setProcProj(const cv::Mat &image)
     {
         //the projection(roi) is resized to the process size and then processed
-        static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC3);
+        static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC1);
         roi_rgb = 0;
         cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_CUBIC);
         make_template(roi_rgb, proc_proj);

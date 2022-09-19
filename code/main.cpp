@@ -2,6 +2,7 @@
 
 #include <SuperimposeMesh/SICAD.h>
 #include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
 #include <mutex>
 
 #include <yarp/os/all.h>
@@ -58,6 +59,7 @@ private:
     std::ofstream fs;
     std::string file_name;
     std::deque< std::array<double, 8> > data_to_save;
+    cv::VideoWriter vid_writer;
 
 public:
 
@@ -99,7 +101,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:if"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -108,14 +110,14 @@ public:
         if(!si_cad)
             return false;
 
-        int blur = proc_size / 20;
-        double dp =  1;//+rescale_size / 100;
+        int blur = proc_size / 10;
+        double dp = 1;//+rescale_size / 100;
         warp_handler.initialise(proc_size, dp2);
         warp_handler.create_Ms(dp);
         warp_handler.set_current(state);
         img_handler.initialise(proc_size, blur, canny_thresh, canny_scale);
 
-        proj_rgb = cv::Mat::zeros(img_size, CV_8UC3);
+        proj_rgb = cv::Mat::zeros(img_size, CV_8UC1);
         proj_32f = cv::Mat::zeros(img_size, CV_32F);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
@@ -141,13 +143,19 @@ public:
         }
         
         if (rf.check("file")) {
-            fs.open(rf.find("file").asString());
+            std::string filename = rf.find("file").asString();
+            fs.open(filename);
             if (!fs.is_open()) {
-                yError() << "Could not open output file"
-                         << rf.find("file").asString();
+                yError() << "Could not open output file" << filename;
+                return false;
+            }
+            vid_writer.open(filename + ".mp4", cv::VideoWriter::fourcc('H','2','6','4'), (int)(1.0/period), img_size, true);
+            if (!vid_writer.isOpened()) {
+                yError() << "Could not open output file" << filename << ".mp4";
                 return false;
             }
         }
+
 
         yInfo() << "====== Configuration ======";
         yInfo() << "Camera Size:" << img_size.width << "x" << img_size.height;
@@ -162,6 +170,8 @@ public:
         return true;
     }
 
+
+
     double getPeriod() override
     {
         return period;
@@ -171,9 +181,10 @@ public:
     {
         static cv::Mat vis, proj_vis, eros_vis;
         //vis = warp_handler.make_visualisation(eros_u);
-        proj_rgb.copyTo(proj_vis);
+        //proj_rgb.copyTo(proj_vis);
         cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
-        vis = proj_rgb*0.5 + eros_vis*0.5;
+        cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
+        vis = proj_vis + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
@@ -182,6 +193,7 @@ public:
         cv::imshow("EROS", vis);
         cv::imshow("Translations", warps_t+0.5);
         cv::imshow("Rotations", warps_r+0.5);
+        
         int c = cv::waitKey(1);
         if (c == 32)
             warp_handler.set_current(initial_state);
@@ -203,6 +215,8 @@ public:
 
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
+        if(vid_writer.isOpened() && eros_handler.tic > 0)
+            vid_writer << vis;
         static int updated_divisor=0;
         if (updated_divisor++ % 10 == 0) {
             if (toc_count) {
@@ -278,6 +292,7 @@ public:
                 // warp_handler.update_from_max();
                 // warp_handler.update_all_possible();
                 updated = warp_handler.update_heuristically();
+                //updated = warp_handler.update_from_max();
                 // state = warp_handler.state_current;
                 //step = true;
             }
@@ -312,11 +327,13 @@ public:
 
             //make the projection template
             img_handler.setProcProj(proj_rgb);
-            warp_handler.projection.img_warp = img_handler.proc_proj;
+            img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+            //warp_handler.projection.img_warp = img_handler.proc_proj;
             double dtoc_proj = Time::now();
             
             //make predictions
             warp_handler.make_predictive_warps();
+            replaceyawpitch(img_handler.img_roi);
             double dtoc_projproc = Time::now();
 
             //get the EROS
@@ -345,6 +362,45 @@ public:
                 data_to_save.push_back({dataset_time, state[0], state[1], state[2], state[3], state[4], state[5], state[6]});
             }
         }
+    }
+
+    void replaceyawpitch(cv::Rect roi)
+    {
+        static cv::Mat rgb = cv::Mat::zeros(img_size, CV_8UC1);
+        rgb = 0;
+        cv::Mat rgb_roi = rgb(roi);
+        //get the state change for delta pitch (around x axis)
+
+        double theta = M_PI_2 * 1.0 / (roi.height*0.5);
+        auto state_temp = state;
+        perform_rotation(state_temp, 0, theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        //complexProjection(si_cad, camera_pose, state_temp, rgb);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::ap].img_warp);
+        warp_handler.warps[warpManager::ap].delta = theta;
+
+        state_temp = state;
+        perform_rotation(state_temp, 0, -theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::an].img_warp);
+        warp_handler.warps[warpManager::an].delta = -theta;
+
+        state_temp = state;
+        perform_rotation(state_temp, 1, theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::bp].img_warp);
+        warp_handler.warps[warpManager::bp].delta = theta;
+
+        state_temp = state;
+        perform_rotation(state_temp, 1, -theta);
+        si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
+        img_handler.setProcProj(rgb);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::bn].img_warp);
+        warp_handler.warps[warpManager::bn].delta = -theta;
+
     }
 
     bool quaternion_test(bool return_value = true)
@@ -457,7 +513,8 @@ public:
         } else {
             worker.join();
         }
-            
+        if(vid_writer.isOpened())
+            vid_writer.release();
         if(fs.is_open())
         {
             yInfo() << "Writing data ...";
@@ -477,7 +534,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
-    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configDRAGON.ini");
+    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configCAR.ini");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);

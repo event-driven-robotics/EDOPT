@@ -4,6 +4,29 @@
 #include <opencv2/opencv.hpp>
 #include <yarp/os/all.h>
 
+std::array<double, 7> q2aa(const std::array<double, 7> &state)
+{
+    std::array<double, 7> aa{0};
+
+    aa[0] = state[0]; //x
+    aa[1] = state[1]; //y
+    aa[2] = state[2]; //z
+
+    //if acos return -nan it means the quaternion wasn't normalised !
+    aa[6] = 2 * acos(state[6]); //state[6] is w, pose[6] = angle
+    double scaler =  sqrt(1 - state[6]*state[6]);
+    if(scaler < 0.001) { //angle is close to 0 so it is insignificant (but don't divide by 0)
+        aa[3] = 1.0; //ax
+    } else {
+        scaler = 1.0 / scaler;
+        aa[3] = state[3] * scaler;
+        aa[4] = state[4] * scaler;
+        aa[5] = state[5] * scaler;
+    }
+
+    return aa;
+}
+
 Superimpose::ModelPose quaternion_to_axisangle(const std::array<double, 7> &state)
 {
     Superimpose::ModelPose pose;
@@ -66,13 +89,14 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
 
 bool complexProjection(SICAD *si_cad, const std::array<double, 7> &camera, const std::array<double, 7> &object, cv::Mat &image) {
 
-    Superimpose::ModelPoseContainer objpose_map;
+    return si_cad->superimpose(q2aa(object), q2aa(camera), image);
+    // Superimpose::ModelPoseContainer objpose_map;
 
-    Superimpose::ModelPose op = quaternion_to_axisangle(object);
-    Superimpose::ModelPose cp = quaternion_to_axisangle(camera);
-    objpose_map.emplace("model", op);
+    // Superimpose::ModelPose op = quaternion_to_axisangle(object);
+    // Superimpose::ModelPose cp = quaternion_to_axisangle(camera);
+    // objpose_map.emplace("model", op);
 
-    return si_cad->superimpose(objpose_map, &(cp[0]), &(cp[3]), image);
+    // return si_cad->superimpose(objpose_map, &(cp[0]), &(cp[3]), image);
 
 }
 
