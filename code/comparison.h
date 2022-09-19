@@ -152,9 +152,7 @@ public:
 
     void create_m_a(double dp, warp_name p, warp_name n)
     {
-        //dp *= 0.5;
-        //dp *= 2;
-        dp *= 10;
+        //dp *= 10;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = M_PI_2 * dp / (proc_size.height * 0.5);
@@ -177,8 +175,7 @@ public:
 
     void create_m_b(double dp, warp_name p, warp_name n)
     {
-        //dp *= 0.4;
-        dp *= 10;
+        //dp *= 10;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = M_PI_2 * dp / (proc_size.width * 0.5);
@@ -249,7 +246,7 @@ public:
     void make_predictive_warps()
     {
         for(auto &warp : warps) {
-            //if(warp.axis == a || warp.axis == b) continue;
+            if(warp.axis == a || warp.axis == b) continue;
             if(warp.active)
                 cv::remap(projection.img_warp, warp.img_warp, warp.rmp, warp.rmsp, cv::INTER_LINEAR);
         }
@@ -278,7 +275,6 @@ public:
 
     void update_state(const warp_bundle &best)
     {
-        double theta;
         double d = fabs(state_current[z]);
         switch(best.axis) {
             case(x):

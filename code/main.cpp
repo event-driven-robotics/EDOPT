@@ -37,7 +37,7 @@ private:
     std::condition_variable signal;
 
     //handlers
-    //EROSdirect eros_handler;>
+    //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
     imageProcessing img_handler;
     warpManager warp_handler;
@@ -101,7 +101,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AEf:o", getName("/AE:i"), eros_k, eros_d)) {
+        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -370,7 +370,7 @@ public:
         cv::Mat rgb_roi = rgb(roi);
         //get the state change for delta pitch (around x axis)
 
-        double theta = M_PI_2 * 10.0 / (roi.height*0.5);
+        double theta = M_PI_2 * 1.0 / (roi.height*0.5);
         auto state_temp = state;
         perform_rotation(state_temp, 0, theta);
         si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
@@ -533,7 +533,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
-    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configDRAGON.ini");
+    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configCAR.ini");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);
