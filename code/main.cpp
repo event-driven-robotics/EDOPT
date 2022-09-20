@@ -28,6 +28,7 @@ private:
     bool parallel_method;
     bool run{true};
     double period{0.1};
+    double render_scaler{1.0};
 
     //threads and mutex, handlers
     std::thread worker;
@@ -78,18 +79,19 @@ public:
         dp2 = rf.check("dp2") && rf.check("dp2", Value(true)).asBool(); //default false
         run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
         parallel_method = rf.check("parallel") && rf.check("parallel", Value(true)).asBool(); // defaulat false
+        render_scaler = rf.check("render_scaler", Value(1.0)).asFloat64();
 
         yarp::os::Bottle& intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
             yError() << "Wrong .ini file or [CAMERA_CALIBRATION] not present. Deal breaker.";
             return false;
         }
-        warp_handler.cam[warpManager::x] = intrinsic_parameters.find("w").asInt32();
-        warp_handler.cam[warpManager::y] = intrinsic_parameters.find("h").asInt32();
-        warp_handler.cam[warpManager::cx] = intrinsic_parameters.find("cx").asFloat32();
-        warp_handler.cam[warpManager::cy] = intrinsic_parameters.find("cy").asFloat32();
-        warp_handler.cam[warpManager::fx] = intrinsic_parameters.find("fx").asFloat32();
-        warp_handler.cam[warpManager::fy] = intrinsic_parameters.find("fy").asFloat32();
+        warp_handler.cam[warpManager::x] = intrinsic_parameters.find("w").asInt32()*render_scaler;
+        warp_handler.cam[warpManager::y] = intrinsic_parameters.find("h").asInt32()*render_scaler;
+        warp_handler.cam[warpManager::cx] = intrinsic_parameters.find("cx").asFloat32()*render_scaler;
+        warp_handler.cam[warpManager::cy] = intrinsic_parameters.find("cy").asFloat32()*render_scaler;
+        warp_handler.cam[warpManager::fx] = intrinsic_parameters.find("fx").asFloat32()*render_scaler;
+        warp_handler.cam[warpManager::fy] = intrinsic_parameters.find("fy").asFloat32()*render_scaler;
         img_size = cv::Size(warp_handler.cam[warpManager::x], warp_handler.cam[warpManager::y]);
 
         if(!loadPose(rf, "object_pose", initial_state)) return false;
@@ -101,7 +103,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(img_size, "/atis3/AE:o", getName("/AE:if"), eros_k, eros_d)) {
+        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:if"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -183,6 +185,7 @@ public:
         //vis = warp_handler.make_visualisation(eros_u);
         //proj_rgb.copyTo(proj_vis);
         cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
+        cv::resize(eros_vis, eros_vis, img_size);
         cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
         vis = proj_vis + eros_vis*0.5;
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
@@ -305,48 +308,52 @@ public:
     void sequential_loop()
     {
         double dataset_time = -1;
+        bool updated = true;
         
 
         while (!isStopping()) {
 
             double dtic = Time::now();
-
-            //perform the projection
-            if (!complexProjection(si_cad, camera_pose, state, proj_rgb)) {
-                yError() << "Could not perform projection";
-                return;
-            }
-
-            //extract RoIs
-            img_handler.set_projection_rois(proj_rgb);
-
-            //and copy them also for the observation
-            img_handler.set_obs_rois_from_projected();
-            warp_handler.scale = img_handler.scale;
-            //warp_handler.extract_rois(proj_rgb);
-
-            //make the projection template
-            img_handler.setProcProj(proj_rgb);
-            img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
-            //warp_handler.projection.img_warp = img_handler.proc_proj;
             double dtoc_proj = Time::now();
-            
-            //make predictions
-            warp_handler.make_predictive_warps();
-            replaceyawpitch(img_handler.img_roi);
             double dtoc_projproc = Time::now();
+            if(updated) {
+
+                //perform the projection
+                si_cad->superimpose(q2aa(state), q2aa(camera_pose), proj_rgb);
+
+                //extract RoIs
+                img_handler.set_projection_rois(proj_rgb);
+
+                //and copy them also for the observation
+                img_handler.set_obs_rois_from_projected();
+                warp_handler.scale = img_handler.scale;
+                //warp_handler.extract_rois(proj_rgb);
+
+                //make the projection template
+                img_handler.setProcProj(proj_rgb);
+                img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+                dtoc_proj = Time::now();
+            
+                //make predictions
+                warp_handler.make_predictive_warps();
+                replaceyawpitch(img_handler.img_roi);
+                dtoc_projproc = Time::now();
+            }
 
             //get the EROS
             dataset_time = eros_handler.tic;
-            img_handler.setProcObs(eros_handler.eros.getSurface());
-            warp_handler.proc_obs = img_handler.proc_obs;
+            static cv::Mat scaled_eros = cv::Mat::zeros(img_size, CV_8U);
+            cv::resize(eros_handler.eros.getSurface(), scaled_eros, scaled_eros.size());
+            img_handler.setProcObs(scaled_eros);
+            //warp_handler.proc_obs = img_handler.proc_obs;
+            img_handler.proc_obs.copyTo(warp_handler.proc_obs);
             double dtoc_eros = Time::now();
 
             warp_handler.score_predictive_warps();
             if(run) {
-                //warp_handler.update_from_max();
-                //warp_handler.update_all_possible();
-                warp_handler.update_heuristically();
+                //updated = warp_handler.update_from_max();
+                //updated = warp_handler.update_all_possible();
+                updated = warp_handler.update_heuristically();
                 state = warp_handler.state_current;
             }
             
@@ -371,7 +378,7 @@ public:
         cv::Mat rgb_roi = rgb(roi);
         //get the state change for delta pitch (around x axis)
 
-        double theta = M_PI_2 * 1.0 / (roi.height*0.5);
+        double theta = M_PI_2 *  3.0 / (roi.height*0.5);
         auto state_temp = state;
         perform_rotation(state_temp, 0, theta);
         si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
@@ -387,6 +394,7 @@ public:
         img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::an].img_warp);
         warp_handler.warps[warpManager::an].delta = -theta;
 
+        theta = M_PI_2 *  3.0 / (roi.width*0.5);
         state_temp = state;
         perform_rotation(state_temp, 1, theta);
         si_cad->superimpose(q2aa(state_temp), q2aa(camera_pose), rgb_roi, roi);
