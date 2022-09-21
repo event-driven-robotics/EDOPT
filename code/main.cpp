@@ -4,6 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/videoio.hpp>
 #include <mutex>
+#include <sstream>
 
 #include <yarp/os/all.h>
 using namespace yarp::os;
@@ -103,7 +104,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:if"), eros_k, eros_d)) {
+        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:id"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -124,7 +125,7 @@ public:
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
         cv::resizeWindow("EROS", img_size);
-        cv::moveWindow("EROS", 0, 0);
+        cv::moveWindow("EROS", 1920, 100);
 
         cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
         cv::resizeWindow("Translations", img_size);
@@ -193,9 +194,18 @@ public:
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
         warps_r = warp_handler.create_rotation_visualisation();
         //cv::flip(vis, vis, 1);
+        
+        std::string rate_string = "- Hz";
+        std::stringstream ss; 
+        ss.str();
+        if(toc_count)
+            ss << (int)toc_count / (period*10) << "Hz";
+        
+        cv::putText(vis, ss.str(), cv::Point(640-160, 480-10), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(200, 200, 200));
+
         cv::imshow("EROS", vis);
-        cv::imshow("Translations", warps_t+0.5);
-        cv::imshow("Rotations", warps_r+0.5);
+        //cv::imshow("Translations", warps_t+0.5);
+        //cv::imshow("Rotations", warps_r+0.5);
         
         int c = cv::waitKey(1);
         if (c == 32)
@@ -312,10 +322,23 @@ public:
         
 
         while (!isStopping()) {
+            //updated = true;
 
             double dtic = Time::now();
             double dtoc_proj = Time::now();
             double dtoc_projproc = Time::now();
+
+            // if(updated) {
+
+            //     projectStateYawPitch(state);
+            //     dtoc_proj = Time::now();
+
+            //     warp_handler.make_predictive_warps();
+            //     dtoc_projproc = Time::now();
+
+
+            // }
+
             if(updated) {
 
                 //perform the projection
@@ -369,6 +392,67 @@ public:
                 data_to_save.push_back({dataset_time, state[0], state[1], state[2], state[3], state[4], state[5], state[6]});
             }
         }
+    }
+
+    void projectStateYawPitch(std::array<double, 7> object)
+    {
+        
+        std::array<double, 7> state_temp;
+        std::vector<std::array<double, 7> > objects;
+        static std::vector<cv::Mat> images(5, cv::Mat::zeros(img_size, CV_8U));
+
+        // for(auto im : images) 
+        //     im(img_handler.img_roi) = 0;
+
+        objects.push_back(q2aa(object));
+        
+        double pitch = 20 * M_PI_2 *  3.0 / (img_handler.img_roi.height*0.5);
+        state_temp = object;
+        perform_rotation(state_temp, 0, pitch);
+        objects.push_back(q2aa(state_temp));
+
+        state_temp = object;
+        perform_rotation(state_temp, 0, -pitch);
+        objects.push_back(q2aa(state_temp));
+
+        double yaw = 20 * M_PI_2 *  3.0 / (img_handler.img_roi.width*0.5);
+        state_temp = object;
+        perform_rotation(state_temp, 1, yaw);
+        objects.push_back(q2aa(state_temp));
+
+        state_temp = object;
+        perform_rotation(state_temp, 1, -yaw);
+        objects.push_back(q2aa(state_temp));
+
+        // for(auto object : objects)
+        //     yInfo() << pitch << yaw << object[3] << " " << object[4] << " " << object[5] << " "<< object[6];
+
+        si_cad->superimpose(q2aa(camera_pose), objects, img_handler.img_roi, images);
+
+        img_handler.set_projection_rois(images[0]);
+        img_handler.set_obs_rois_from_projected();
+        warp_handler.scale = img_handler.scale;
+
+        img_handler.setProcProj(images[0]);
+        img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+        proj_rgb = images[0];
+
+        img_handler.setProcProj(images[1]);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::ap].img_warp);
+        warp_handler.warps[warpManager::ap].delta = pitch;
+
+        img_handler.setProcProj(images[2]);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::an].img_warp);
+        warp_handler.warps[warpManager::an].delta = -pitch;
+
+        img_handler.setProcProj(images[3]);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::bp].img_warp);
+        warp_handler.warps[warpManager::bp].delta = yaw;
+
+        img_handler.setProcProj(images[4]);
+        img_handler.proc_proj.copyTo(warp_handler.warps[warpManager::bn].img_warp);
+        warp_handler.warps[warpManager::bn].delta = -yaw;
+
     }
 
     void replaceyawpitch(cv::Rect roi)

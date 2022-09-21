@@ -1,39 +1,73 @@
 diff --git a/src/SuperimposeMesh/include/SuperimposeMesh/SICAD.h b/src/SuperimposeMesh/include/SuperimposeMesh/SICAD.h
-index 0168da8..68955a5 100644
+index 0168da8..017264d 100644
 --- a/src/SuperimposeMesh/include/SuperimposeMesh/SICAD.h
 +++ b/src/SuperimposeMesh/include/SuperimposeMesh/SICAD.h
-@@ -191,6 +191,8 @@ public:
+@@ -191,6 +191,9 @@ public:
       *
       * @return true upon success, false otherswise.
       **/
 +    virtual bool superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat &img);
 +    virtual bool superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat &img, cv::Rect roi);
++    virtual bool superimpose(const std::array<double, 7> cam_pose, const std::vector<std::array<double, 7> > &obj_poses, const cv::Rect &roi, std::vector<cv::Mat> &images);
      virtual bool superimpose(const std::vector<ModelPoseContainer>& objpos_multimap, const double* cam_x, const double* cam_o, cv::Mat& img);
  
      virtual bool superimpose(const ModelPoseContainer& objpos_map, const double* cam_x, const double* cam_o, cv::Mat& img,
+diff --git a/src/SuperimposeMesh/shader/shader_model_texture.frag b/src/SuperimposeMesh/shader/shader_model_texture.frag
+index f9c169b..3f38ec5 100644
+--- a/src/SuperimposeMesh/shader/shader_model_texture.frag
++++ b/src/SuperimposeMesh/shader/shader_model_texture.frag
+@@ -15,5 +15,11 @@ uniform sampler2D texture_diffuse1;
+ 
+ void main()
+ {
+-     color = texture(texture_diffuse1, TexCoords);
++    //original
++    //color = texture(texture_diffuse1, TexCoords);
++
++    // Transform to grayscale keeping 3 ch
++    vec4 c =  texture(texture_diffuse1, TexCoords);
++    float gray = dot(c.rgb, vec3(0.299, 0.587, 0.114));
++    color = vec4(vec3(gray), 1.0);
+ }
 diff --git a/src/SuperimposeMesh/src/SICAD.cpp b/src/SuperimposeMesh/src/SICAD.cpp
-index 6588e0d..f0eb583 100644
+index 6588e0d..2d768d4 100644
 --- a/src/SuperimposeMesh/src/SICAD.cpp
 +++ b/src/SuperimposeMesh/src/SICAD.cpp
-@@ -461,6 +461,140 @@ void SICAD::setOglWindowShouldClose(bool should_close)
+@@ -14,7 +14,11 @@
+ #include <assimp/Importer.hpp>
+ #include <assimp/scene.h>
+ #include <assimp/postprocess.h>
++#include <assimp/scene.h>
+ 
++#include <assimp/Importer.hpp>
++#include <chrono>
++#include <exception>
+ #include <glm/gtc/matrix_transform.hpp>
+ #include <glm/gtc/type_ptr.hpp>
+ 
+@@ -134,7 +138,10 @@ SICAD::SICAD
+ 
+     /* Compute the maximum number of images that can be rendered conditioned on the maximum renderbuffer size */
+     factorize_int(num_images, std::floor(renderbuffer_size_ / image_width_), std::floor(renderbuffer_size_ / image_height_), tiles_cols_, tiles_rows_);
+-    tiles_num_ = tiles_rows_ * tiles_cols_;
++    // tiles_num_ = tiles_rows_ * tiles_cols_;
++    tiles_num_ = 5;
++    tiles_cols_ = 5;
++    tiles_rows_ = 1;
+     std::cout << log_ID_ << "Required to render " + std::to_string(num_images) + " image(s)." << std::endl;
+     std::cout << log_ID_ << "Allowed number or rendered images is " + std::to_string(tiles_num_) + " (" + std::to_string(tiles_rows_) + "x" + std::to_string(tiles_cols_) + " grid)." << std::endl;
+ 
+@@ -461,9 +468,225 @@ void SICAD::setOglWindowShouldClose(bool should_close)
      pollOrPostEvent();
  }
  
-+bool SICAD::superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat &img)
-+{
++bool SICAD::superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat& img) {
++    auto tic1 = std::chrono::high_resolution_clock::now();
 +    glfwMakeContextCurrent(window_);
-+
+ 
+-bool SICAD::superimpose
+-(
 +    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-+
-+    /* Render in the upper-left-most tile of the render grid */
-+    glViewport(0,               framebuffer_height_ - tile_img_height_,
-+               tile_img_width_, tile_img_height_                       );
-+    glScissor (0,               framebuffer_height_ - tile_img_height_,
-+               tile_img_width_, tile_img_height_                       );
-+
-+    /* Clear the colorbuffer. */
-+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 +
 +    /* View transformation matrix. */
 +    glm::mat4 view = getViewTransformationMatrix(&cam_pose[0], &cam_pose[3]);
@@ -51,27 +85,43 @@ index 6588e0d..f0eb583 100644
 +    glUniformMatrix4fv(glGetUniformLocation(shader_frame_->get_program(), "view"), 1, GL_FALSE, glm::value_ptr(view));
 +    shader_frame_->uninstall();
 +
-+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<float>(obj_pose[6]), glm::vec3(static_cast<float>(obj_pose[3]), static_cast<float>(obj_pose[4]), static_cast<float>(obj_pose[5])));
-+    model[3][0] = obj_pose[0];
-+    model[3][1] = obj_pose[1];
-+    model[3][2] = obj_pose[2];
++    /* Clear the colorbuffer. */
++    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
++    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
++    auto tic2 = std::chrono::high_resolution_clock::now();
 +
-+    auto iter_model = model_obj_.find("model");
-+    shader_mesh_texture_->install();
-+    glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "model"), 1, GL_FALSE, glm::value_ptr(model));
-+    (iter_model->second)->Draw(*shader_mesh_texture_);
-+    shader_mesh_texture_->uninstall();
++    {
++        /* Render in the upper-left-most tile of the render grid */
++        glViewport(0, framebuffer_height_ - tile_img_height_,
++                   tile_img_width_, tile_img_height_);
++        glScissor(0, framebuffer_height_ - tile_img_height_,
++                  tile_img_width_, tile_img_height_);
 +
-+    /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
-+    /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
-+       and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
-+    static cv::Mat ogl_pixel(framebuffer_height_ / tiles_rows_, framebuffer_width_ / tiles_cols_, CV_8UC3);
-+    glReadBuffer(GL_COLOR_ATTACHMENT0);
-+    glPixelStorei(GL_PACK_ALIGNMENT, (ogl_pixel.step & 3) ? 1 : 4);
-+    glPixelStorei(GL_PACK_ROW_LENGTH, ogl_pixel.step/ogl_pixel.elemSize());
-+    glReadPixels(0, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_, GL_BGR, GL_UNSIGNED_BYTE, ogl_pixel.data);
++        glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<float>(obj_pose[6]), glm::vec3(static_cast<float>(obj_pose[3]), static_cast<float>(obj_pose[4]), static_cast<float>(obj_pose[5])));
++        model[3][0] = obj_pose[0];
++        model[3][1] = obj_pose[1];
++        model[3][2] = obj_pose[2];
 +
-+    cv::flip(ogl_pixel, img, 0);
++        auto iter_model = model_obj_.find("model");
++        shader_mesh_texture_->install();
++        glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "model"), 1, GL_FALSE, glm::value_ptr(model));
++        (iter_model->second)->Draw(*shader_mesh_texture_);
++        shader_mesh_texture_->uninstall();
++
++        /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
++        /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
++           and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
++        static cv::Mat ogl_pixel(framebuffer_height_ / tiles_rows_, framebuffer_width_ / tiles_cols_, CV_8UC1);
++        glReadBuffer(GL_COLOR_ATTACHMENT0);
++        glPixelStorei(GL_PACK_ALIGNMENT, (ogl_pixel.step & 3) ? 1 : 4);
++        glPixelStorei(GL_PACK_ROW_LENGTH, ogl_pixel.step / ogl_pixel.elemSize());
++        glReadPixels(0, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_, GL_RED, GL_UNSIGNED_BYTE, ogl_pixel.data);
++
++        cv::flip(ogl_pixel, img, 0);
++        // cv::cvtColor(ogl_pixel, img, cv::COLOR_GRAY2BGR);
++    }
++
++    auto tic3 = std::chrono::high_resolution_clock::now();
 +
 +    /* Swap the buffers. */
 +    glfwSwapBuffers(window_);
@@ -82,25 +132,21 @@ index 6588e0d..f0eb583 100644
 +
 +    glfwMakeContextCurrent(nullptr);
 +
-+    return true;
++    auto tic4 = std::chrono::high_resolution_clock::now();
 +
++    std::chrono::duration<double, std::milli> p1 = tic2 - tic1;
++    std::chrono::duration<double, std::milli> p2 = tic3 - tic2;
++    std::chrono::duration<double, std::milli> p3 = tic4 - tic3;
++
++    // std::cout << p1.count() << " " << p2.count() << " " << p3.count() << " " << (p1.count() + p3.count()) / (p1.count()+p2.count()+p3.count()) << "\%" << std::endl;
++
++    return true;
 +}
 +
-+bool SICAD::superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat &img, cv::Rect roi)
-+{
++bool SICAD::superimpose(const std::array<double, 7> cam_pose, const std::vector<std::array<double, 7> >& obj_poses, const cv::Rect& roi, std::vector<cv::Mat>& images) {
 +    glfwMakeContextCurrent(window_);
 +
 +    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-+
-+    /* Render in the upper-left-most tile of the render grid */
-+    glViewport(0,               framebuffer_height_ - tile_img_height_,
-+               tile_img_width_, tile_img_height_                       );
-+    glScissor (0,               framebuffer_height_ - tile_img_height_,
-+               tile_img_width_, tile_img_height_                       );
-+
-+    /* Clear the colorbuffer. */
-+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 +
 +    /* View transformation matrix. */
 +    glm::mat4 view = getViewTransformationMatrix(&cam_pose[0], &cam_pose[3]);
@@ -118,27 +164,110 @@ index 6588e0d..f0eb583 100644
 +    glUniformMatrix4fv(glGetUniformLocation(shader_frame_->get_program(), "view"), 1, GL_FALSE, glm::value_ptr(view));
 +    shader_frame_->uninstall();
 +
-+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<float>(obj_pose[6]), glm::vec3(static_cast<float>(obj_pose[3]), static_cast<float>(obj_pose[4]), static_cast<float>(obj_pose[5])));
-+    model[3][0] = obj_pose[0];
-+    model[3][1] = obj_pose[1];
-+    model[3][2] = obj_pose[2];
++    /* Clear the colorbuffer. */
++    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
++    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 +
 +    auto iter_model = model_obj_.find("model");
 +    shader_mesh_texture_->install();
-+    glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "model"), 1, GL_FALSE, glm::value_ptr(model));
-+    (iter_model->second)->Draw(*shader_mesh_texture_);
++    for (unsigned int i = 0; i < tiles_cols_; ++i) {
++        auto& obj_pose = obj_poses[i];
++
++        glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<float>(obj_pose[6]), glm::vec3(static_cast<float>(obj_pose[3]), static_cast<float>(obj_pose[4]), static_cast<float>(obj_pose[5])));
++        model[3][0] = obj_pose[0];
++        model[3][1] = obj_pose[1];
++        model[3][2] = obj_pose[2];
++
++        /* Render starting by the upper-left-most tile of the render grid, proceding by columns and rows. */
++        glViewport(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_);
++        glScissor(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_);
++
++        glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "model"), 1, GL_FALSE, glm::value_ptr(model));
++        (iter_model->second)->Draw(*shader_mesh_texture_);
++    }
 +    shader_mesh_texture_->uninstall();
 +
-+    /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
-+    /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
-+       and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
-+    glReadBuffer(GL_COLOR_ATTACHMENT0);
-+    glPixelStorei(GL_PACK_ALIGNMENT, (img.step & 3) ? 1 : 4);
-+    glPixelStorei(GL_PACK_ROW_LENGTH, img.step/img.elemSize());
-+    //glReadPixels(roi.x, framebuffer_height_ - tile_img_height_ - roi.y, roi.width, roi.height, GL_BGR, GL_UNSIGNED_BYTE, img.data);
-+    glReadPixels(roi.x, tile_img_height_ - roi.y - roi.height, roi.width, roi.height, GL_BGR, GL_UNSIGNED_BYTE, img.data);
++    for (unsigned int i = 0; i < tiles_cols_; ++i) {
++        auto img = images[i](roi);
 +
-+    cv::flip(img, img, 0);
++        /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
++        /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
++            and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
++        glReadBuffer(GL_COLOR_ATTACHMENT0);
++        glPixelStorei(GL_PACK_ALIGNMENT, (img.step & 3) ? 1 : 4);
++        glPixelStorei(GL_PACK_ROW_LENGTH, img.step / img.elemSize());
++        glReadPixels(tile_img_width_ * i + roi.x, tile_img_height_ - roi.y - roi.height, roi.width, roi.height, GL_RED, GL_UNSIGNED_BYTE, img.data);
++
++        // glReadPixels(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_, GL_RED, GL_UNSIGNED_BYTE, img.data);
++
++        cv::flip(img, img, 0);
++    }
++
++    /* Swap the buffers. */
++    glfwSwapBuffers(window_);
++    pollOrPostEvent();
++
++    glBindFramebuffer(GL_FRAMEBUFFER, 0);
++
++    glfwMakeContextCurrent(nullptr);
++
++    return true;
++}
++
++bool SICAD::superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat& img, cv::Rect roi) {
++    glfwMakeContextCurrent(window_);
++
++    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
++
++    /* View transformation matrix. */
++    glm::mat4 view = getViewTransformationMatrix(&cam_pose[0], &cam_pose[3]);
++
++    /* Install/Use the program specified by the shader. */
++    shader_cad_->install();
++    glUniformMatrix4fv(glGetUniformLocation(shader_cad_->get_program(), "view"), 1, GL_FALSE, glm::value_ptr(view));
++    shader_cad_->uninstall();
++
++    shader_mesh_texture_->install();
++    glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "view"), 1, GL_FALSE, glm::value_ptr(view));
++    shader_mesh_texture_->uninstall();
++
++    shader_frame_->install();
++    glUniformMatrix4fv(glGetUniformLocation(shader_frame_->get_program(), "view"), 1, GL_FALSE, glm::value_ptr(view));
++    shader_frame_->uninstall();
++
++    /* Clear the colorbuffer. */
++    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
++    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
++
++    {
++        /* Render in the upper-left-most tile of the render grid */
++        glViewport(0, framebuffer_height_ - tile_img_height_,
++                   tile_img_width_, tile_img_height_);
++        glScissor(0, framebuffer_height_ - tile_img_height_,
++                  tile_img_width_, tile_img_height_);
++
++        glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<float>(obj_pose[6]), glm::vec3(static_cast<float>(obj_pose[3]), static_cast<float>(obj_pose[4]), static_cast<float>(obj_pose[5])));
++        model[3][0] = obj_pose[0];
++        model[3][1] = obj_pose[1];
++        model[3][2] = obj_pose[2];
++
++        auto iter_model = model_obj_.find("model");
++        shader_mesh_texture_->install();
++        glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "model"), 1, GL_FALSE, glm::value_ptr(model));
++        (iter_model->second)->Draw(*shader_mesh_texture_);
++        shader_mesh_texture_->uninstall();
++
++        /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
++        /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
++           and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
++        glReadBuffer(GL_COLOR_ATTACHMENT0);
++        glPixelStorei(GL_PACK_ALIGNMENT, (img.step & 3) ? 1 : 4);
++        glPixelStorei(GL_PACK_ROW_LENGTH, img.step / img.elemSize());
++        // glReadPixels(roi.x, framebuffer_height_ - tile_img_height_ - roi.y, roi.width, roi.height, GL_BGR, GL_UNSIGNED_BYTE, img.data);
++        glReadPixels(roi.x, tile_img_height_ - roi.y - roi.height, roi.width, roi.height, GL_RED, GL_UNSIGNED_BYTE, img.data);
++
++        cv::flip(img, img, 0);
++    }
 +
 +    /* Swap the buffers. */
 +    glfwSwapBuffers(window_);
@@ -150,18 +279,9 @@ index 6588e0d..f0eb583 100644
 +    glfwMakeContextCurrent(nullptr);
 +
 +    return true;
++}
 +
-+} 
-+
- 
- bool SICAD::superimpose
- (
-@@ -553,7 +687,7 @@ bool SICAD::superimpose
-     /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
-     /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
-        and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
--    cv::Mat ogl_pixel(framebuffer_height_ / tiles_rows_, framebuffer_width_ / tiles_cols_, CV_8UC3);
-+    static cv::Mat ogl_pixel(framebuffer_height_ / tiles_rows_, framebuffer_width_ / tiles_cols_, CV_8UC3);
-     glReadBuffer(GL_COLOR_ATTACHMENT0);
-     glPixelStorei(GL_PACK_ALIGNMENT, (ogl_pixel.step & 3) ? 1 : 4);
-     glPixelStorei(GL_PACK_ROW_LENGTH, ogl_pixel.step/ogl_pixel.elemSize());
++bool SICAD::superimpose(
+     const ModelPoseContainer& objpos_map,
+     const double* cam_x,
+     const double* cam_o,

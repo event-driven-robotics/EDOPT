@@ -72,6 +72,12 @@ public:
 
         // find the bounding rectangle and add some buffer
         img_roi = cv::boundingRect(projected);
+
+        if(img_roi.width == 0) {
+            img_roi = full_roi;
+            return;
+        }
+
         img_roi.x -= buffer;
         img_roi.y -= buffer;
         img_roi.width += buffer * 2;
