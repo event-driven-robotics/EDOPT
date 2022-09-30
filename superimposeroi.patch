@@ -30,10 +30,10 @@ index f9c169b..3f38ec5 100644
 +    color = vec4(vec3(gray), 1.0);
  }
 diff --git a/src/SuperimposeMesh/src/SICAD.cpp b/src/SuperimposeMesh/src/SICAD.cpp
-index 6588e0d..2d768d4 100644
+index 6588e0d..681b55f 100644
 --- a/src/SuperimposeMesh/src/SICAD.cpp
 +++ b/src/SuperimposeMesh/src/SICAD.cpp
-@@ -14,7 +14,11 @@
+@@ -14,11 +14,16 @@
  #include <assimp/Importer.hpp>
  #include <assimp/scene.h>
  #include <assimp/postprocess.h>
@@ -45,30 +45,23 @@ index 6588e0d..2d768d4 100644
  #include <glm/gtc/matrix_transform.hpp>
  #include <glm/gtc/type_ptr.hpp>
  
-@@ -134,7 +138,10 @@ SICAD::SICAD
+ #include <opencv2/imgproc/imgproc.hpp>
++#include <opencv2/highgui/highgui.hpp>
  
-     /* Compute the maximum number of images that can be rendered conditioned on the maximum renderbuffer size */
-     factorize_int(num_images, std::floor(renderbuffer_size_ / image_width_), std::floor(renderbuffer_size_ / image_height_), tiles_cols_, tiles_rows_);
--    tiles_num_ = tiles_rows_ * tiles_cols_;
-+    // tiles_num_ = tiles_rows_ * tiles_cols_;
-+    tiles_num_ = 5;
-+    tiles_cols_ = 5;
-+    tiles_rows_ = 1;
-     std::cout << log_ID_ << "Required to render " + std::to_string(num_images) + " image(s)." << std::endl;
-     std::cout << log_ID_ << "Allowed number or rendered images is " + std::to_string(tiles_num_) + " (" + std::to_string(tiles_rows_) + "x" + std::to_string(tiles_cols_) + " grid)." << std::endl;
  
-@@ -461,9 +468,225 @@ void SICAD::setOglWindowShouldClose(bool should_close)
+ int SICAD::class_counter_ = 0;
+@@ -461,9 +466,240 @@ void SICAD::setOglWindowShouldClose(bool should_close)
      pollOrPostEvent();
  }
  
 +bool SICAD::superimpose(std::array<double, 7> obj_pose, std::array<double, 7> cam_pose, cv::Mat& img) {
-+    auto tic1 = std::chrono::high_resolution_clock::now();
++    //auto tic1 = std::chrono::high_resolution_clock::now();
 +    glfwMakeContextCurrent(window_);
++
++    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
  
 -bool SICAD::superimpose
 -(
-+    glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
-+
 +    /* View transformation matrix. */
 +    glm::mat4 view = getViewTransformationMatrix(&cam_pose[0], &cam_pose[3]);
 +
@@ -88,7 +81,7 @@ index 6588e0d..2d768d4 100644
 +    /* Clear the colorbuffer. */
 +    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 +    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-+    auto tic2 = std::chrono::high_resolution_clock::now();
++    //auto tic2 = std::chrono::high_resolution_clock::now();
 +
 +    {
 +        /* Render in the upper-left-most tile of the render grid */
@@ -121,7 +114,7 @@ index 6588e0d..2d768d4 100644
 +        // cv::cvtColor(ogl_pixel, img, cv::COLOR_GRAY2BGR);
 +    }
 +
-+    auto tic3 = std::chrono::high_resolution_clock::now();
++    //auto tic3 = std::chrono::high_resolution_clock::now();
 +
 +    /* Swap the buffers. */
 +    glfwSwapBuffers(window_);
@@ -132,11 +125,11 @@ index 6588e0d..2d768d4 100644
 +
 +    glfwMakeContextCurrent(nullptr);
 +
-+    auto tic4 = std::chrono::high_resolution_clock::now();
++    //auto tic4 = std::chrono::high_resolution_clock::now();
 +
-+    std::chrono::duration<double, std::milli> p1 = tic2 - tic1;
-+    std::chrono::duration<double, std::milli> p2 = tic3 - tic2;
-+    std::chrono::duration<double, std::milli> p3 = tic4 - tic3;
++    // std::chrono::duration<double, std::milli> p1 = tic2 - tic1;
++    // std::chrono::duration<double, std::milli> p2 = tic3 - tic2;
++    // std::chrono::duration<double, std::milli> p3 = tic4 - tic3;
 +
 +    // std::cout << p1.count() << " " << p2.count() << " " << p3.count() << " " << (p1.count() + p3.count()) / (p1.count()+p2.count()+p3.count()) << "\%" << std::endl;
 +
@@ -164,44 +157,59 @@ index 6588e0d..2d768d4 100644
 +    glUniformMatrix4fv(glGetUniformLocation(shader_frame_->get_program(), "view"), 1, GL_FALSE, glm::value_ptr(view));
 +    shader_frame_->uninstall();
 +
-+    /* Clear the colorbuffer. */
-+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
++    /* Render starting by the upper-left-most tile of the render grid, proceding by columns and rows. */
++    glViewport(0, 0, tile_img_width_, tile_img_height_);
++    glScissor(0, 0, tile_img_width_, tile_img_height_);
 +
 +    auto iter_model = model_obj_.find("model");
++
++
++    glReadBuffer(GL_COLOR_ATTACHMENT0);
++    glPixelStorei(GL_PACK_ALIGNMENT, (images[0].step & 3) ? 1 : 4);
++    glPixelStorei(GL_PACK_ROW_LENGTH, images[0].step / images[0].elemSize());
++
 +    shader_mesh_texture_->install();
-+    for (unsigned int i = 0; i < tiles_cols_; ++i) {
++    for (unsigned int i = 0; i < obj_poses.size(); ++i) {
 +        auto& obj_pose = obj_poses[i];
++        cv::Mat img;
++        // if(i == 0) img = images[i];
++        // else 
++        img = images[i](roi);
 +
 +        glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<float>(obj_pose[6]), glm::vec3(static_cast<float>(obj_pose[3]), static_cast<float>(obj_pose[4]), static_cast<float>(obj_pose[5])));
 +        model[3][0] = obj_pose[0];
 +        model[3][1] = obj_pose[1];
 +        model[3][2] = obj_pose[2];
 +
-+        /* Render starting by the upper-left-most tile of the render grid, proceding by columns and rows. */
-+        glViewport(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_);
-+        glScissor(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_);
-+
++        /* Clear the colorbuffer. */
++        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
++        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 +        glUniformMatrix4fv(glGetUniformLocation(shader_mesh_texture_->get_program(), "model"), 1, GL_FALSE, glm::value_ptr(model));
 +        (iter_model->second)->Draw(*shader_mesh_texture_);
++        // if(i == 0) 
++        //     glReadPixels(0, 0, tile_img_width_, tile_img_height_, GL_RED, GL_UNSIGNED_BYTE, img.data);
++        // else
++            glReadPixels(roi.x, tile_img_height_ - roi.y - roi.height, roi.width, roi.height, GL_RED, GL_UNSIGNED_BYTE, img.data);
++        cv::flip(img, img, 0);
 +    }
 +    shader_mesh_texture_->uninstall();
 +
-+    for (unsigned int i = 0; i < tiles_cols_; ++i) {
-+        auto img = images[i](roi);
 +
-+        /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
-+        /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
-+            and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
-+        glReadBuffer(GL_COLOR_ATTACHMENT0);
-+        glPixelStorei(GL_PACK_ALIGNMENT, (img.step & 3) ? 1 : 4);
-+        glPixelStorei(GL_PACK_ROW_LENGTH, img.step / img.elemSize());
-+        glReadPixels(tile_img_width_ * i + roi.x, tile_img_height_ - roi.y - roi.height, roi.width, roi.height, GL_RED, GL_UNSIGNED_BYTE, img.data);
++    // for (unsigned int i = 0; i < obj_poses.size(); ++i) {
++    //     auto img = images[i];
 +
-+        // glReadPixels(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_, GL_RED, GL_UNSIGNED_BYTE, img.data);
++    //     /* Read before swap. glReadPixels read the current framebuffer, i.e. the back one. */
++    //     /* See: http://stackoverflow.com/questions/16809833/opencv-image-loading-for-opengl-texture#16812529
++    //         and http://stackoverflow.com/questions/9097756/converting-data-from-glreadpixels-to-opencvmat#9098883 */
++    //     glReadBuffer(GL_COLOR_ATTACHMENT0);
++    //     glPixelStorei(GL_PACK_ALIGNMENT, (img.step & 3) ? 1 : 4);
++    //     glPixelStorei(GL_PACK_ROW_LENGTH, img.step / img.elemSize());
++    //     //glReadPixels(tile_img_width_ * i + roi.x, tile_img_height_ - roi.y - roi.height, roi.width, roi.height, GL_RED, GL_UNSIGNED_BYTE, img.data);
 +
-+        cv::flip(img, img, 0);
-+    }
++    //     glReadPixels(tile_img_width_ * i, framebuffer_height_ - tile_img_height_, tile_img_width_, tile_img_height_, GL_RED, GL_UNSIGNED_BYTE, img.data);
++
++    //     cv::flip(img, img, 0);
++    // }
 +
 +    /* Swap the buffers. */
 +    glfwSwapBuffers(window_);

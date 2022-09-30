@@ -104,7 +104,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:id"), eros_k, eros_d)) {
+        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:fi"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -113,7 +113,7 @@ public:
         if(!si_cad)
             return false;
 
-        int blur = proc_size / 10;
+        int blur = proc_size / 20;
         double dp = 1;//+rescale_size / 100;
         warp_handler.initialise(proc_size, dp2);
         warp_handler.create_Ms(dp);
@@ -184,11 +184,13 @@ public:
     {
         static cv::Mat vis, proj_vis, eros_vis;
         //vis = warp_handler.make_visualisation(eros_u);
-        //proj_rgb.copyTo(proj_vis);
+        //proj_rgb.copyTo(proj_vis); 
+        //img_handler.process_eros(eros_handler.eros.getSurface(), eros_vis);
         cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
         cv::resize(eros_vis, eros_vis, img_size);
         cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
         vis = proj_vis + eros_vis*0.5;
+        cv::rectangle(vis, img_handler.img_roi, cv::Scalar(255, 255, 255));
         static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         warps_t = warp_handler.create_translation_visualisation();
         static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
@@ -204,8 +206,8 @@ public:
         cv::putText(vis, ss.str(), cv::Point(640-160, 480-10), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(200, 200, 200));
 
         cv::imshow("EROS", vis);
-        //cv::imshow("Translations", warps_t+0.5);
-        //cv::imshow("Rotations", warps_r+0.5);
+        cv::imshow("Translations", warps_t+0.5);
+        cv::imshow("Rotations", warps_r+0.5);
         
         int c = cv::waitKey(1);
         if (c == 32)
@@ -319,49 +321,52 @@ public:
     {
         double dataset_time = -1;
         bool updated = true;
+
+        projectStateYawPitch(state);
+        warp_handler.make_predictive_warps();
         
 
         while (!isStopping()) {
-            //updated = true;
+            updated = true;
 
             double dtic = Time::now();
             double dtoc_proj = Time::now();
             double dtoc_projproc = Time::now();
 
-            // if(updated) {
-
-            //     projectStateYawPitch(state);
-            //     dtoc_proj = Time::now();
-
-            //     warp_handler.make_predictive_warps();
-            //     dtoc_projproc = Time::now();
-
-
-            // }
-
             if(updated) {
 
-                //perform the projection
-                si_cad->superimpose(q2aa(state), q2aa(camera_pose), proj_rgb);
-
-                //extract RoIs
-                img_handler.set_projection_rois(proj_rgb);
-
-                //and copy them also for the observation
-                img_handler.set_obs_rois_from_projected();
-                warp_handler.scale = img_handler.scale;
-                //warp_handler.extract_rois(proj_rgb);
-
-                //make the projection template
-                img_handler.setProcProj(proj_rgb);
-                img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+                projectStateYawPitch(state);
                 dtoc_proj = Time::now();
-            
-                //make predictions
+
                 warp_handler.make_predictive_warps();
-                replaceyawpitch(img_handler.img_roi);
                 dtoc_projproc = Time::now();
+
+
             }
+
+            // if(updated) {
+
+            //     //perform the projection
+            //     si_cad->superimpose(q2aa(state), q2aa(camera_pose), proj_rgb);
+
+            //     //extract RoIs
+            //     img_handler.set_projection_rois(proj_rgb);
+
+            //     //and copy them also for the observation
+            //     img_handler.set_obs_rois_from_projected();
+            //     warp_handler.scale = img_handler.scale;
+            //     //warp_handler.extract_rois(proj_rgb);
+
+            //     //make the projection template
+            //     img_handler.setProcProj(proj_rgb);
+            //     img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+            //     dtoc_proj = Time::now();
+            
+            //     //make predictions
+            //     warp_handler.make_predictive_warps();
+            //     replaceyawpitch(img_handler.img_roi);
+            //     dtoc_projproc = Time::now();
+            // }
 
             //get the EROS
             dataset_time = eros_handler.tic;
@@ -399,14 +404,16 @@ public:
         
         std::array<double, 7> state_temp;
         std::vector<std::array<double, 7> > objects;
-        static std::vector<cv::Mat> images(5, cv::Mat::zeros(img_size, CV_8U));
-
-        // for(auto im : images) 
-        //     im(img_handler.img_roi) = 0;
+        static std::vector<cv::Mat> images;
+        if (images.empty()) {
+            for (auto i = 0; i < 5; i++)
+                images.push_back(cv::Mat::zeros(img_size, CV_8U));
+        }
 
         objects.push_back(q2aa(object));
         
-        double pitch = 20 * M_PI_2 *  3.0 / (img_handler.img_roi.height*0.5);
+        double pitch = 1 * M_PI_2 *  1.0 / (img_handler.img_roi.height*0.5);
+        pitch = 2.0 * M_PI / 180.0;
         state_temp = object;
         perform_rotation(state_temp, 0, pitch);
         objects.push_back(q2aa(state_temp));
@@ -415,7 +422,8 @@ public:
         perform_rotation(state_temp, 0, -pitch);
         objects.push_back(q2aa(state_temp));
 
-        double yaw = 20 * M_PI_2 *  3.0 / (img_handler.img_roi.width*0.5);
+        double yaw = 1 * M_PI_2 *  1.0 / (img_handler.img_roi.width*0.5);
+        yaw = 2.0 * M_PI / 180.0;
         state_temp = object;
         perform_rotation(state_temp, 1, yaw);
         objects.push_back(q2aa(state_temp));
@@ -423,9 +431,6 @@ public:
         state_temp = object;
         perform_rotation(state_temp, 1, -yaw);
         objects.push_back(q2aa(state_temp));
-
-        // for(auto object : objects)
-        //     yInfo() << pitch << yaw << object[3] << " " << object[4] << " " << object[5] << " "<< object[6];
 
         si_cad->superimpose(q2aa(camera_pose), objects, img_handler.img_roi, images);
 
