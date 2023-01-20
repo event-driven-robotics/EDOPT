@@ -104,7 +104,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:fi"), eros_k, eros_d)) {
+        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }

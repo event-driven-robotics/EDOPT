@@ -30,10 +30,10 @@ index f9c169b..3f38ec5 100644
 +    color = vec4(vec3(gray), 1.0);
  }
 diff --git a/src/SuperimposeMesh/src/SICAD.cpp b/src/SuperimposeMesh/src/SICAD.cpp
-index 6588e0d..681b55f 100644
+index 6588e0d..7b890db 100644
 --- a/src/SuperimposeMesh/src/SICAD.cpp
 +++ b/src/SuperimposeMesh/src/SICAD.cpp
-@@ -14,11 +14,16 @@
+@@ -14,7 +14,11 @@
  #include <assimp/Importer.hpp>
  #include <assimp/scene.h>
  #include <assimp/postprocess.h>
@@ -45,12 +45,7 @@ index 6588e0d..681b55f 100644
  #include <glm/gtc/matrix_transform.hpp>
  #include <glm/gtc/type_ptr.hpp>
  
- #include <opencv2/imgproc/imgproc.hpp>
-+#include <opencv2/highgui/highgui.hpp>
- 
- 
- int SICAD::class_counter_ = 0;
-@@ -461,9 +466,240 @@ void SICAD::setOglWindowShouldClose(bool should_close)
+@@ -461,9 +465,240 @@ void SICAD::setOglWindowShouldClose(bool should_close)
      pollOrPostEvent();
  }
  
