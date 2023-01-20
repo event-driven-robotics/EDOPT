@@ -73,17 +73,18 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
     SICAD::ModelPathContainer obj;
     obj.emplace("model", object_path);
 
-        yInfo() << "Creating SICAD class with object: " << object_path
-                << "and parameters" << intrinsic_parameters.toString();
-
+    yInfo() << "Creating SICAD class with object: " << object_path
+            << "and parameters" << intrinsic_parameters.toString();
+    
+    double render_scaler = config.check("render_scaler", Value(1.0)).asFloat64();
 
     return new SICAD(obj,
-                     intrinsic_parameters.find("w").asInt32(),
-                     intrinsic_parameters.find("h").asInt32(),
-                     intrinsic_parameters.find("fx").asFloat32(),
-                     intrinsic_parameters.find("fy").asFloat32(),
-                     intrinsic_parameters.find("cx").asFloat32(),
-                     intrinsic_parameters.find("cy").asFloat32());
+                     intrinsic_parameters.find("w").asInt32()*render_scaler,
+                     intrinsic_parameters.find("h").asInt32()*render_scaler,
+                     intrinsic_parameters.find("fx").asFloat32()*render_scaler,
+                     intrinsic_parameters.find("fy").asFloat32()*render_scaler,
+                     intrinsic_parameters.find("cx").asFloat32()*render_scaler,
+                     intrinsic_parameters.find("cy").asFloat32()*render_scaler);
 
 }
 

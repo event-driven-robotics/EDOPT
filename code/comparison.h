@@ -152,7 +152,6 @@ public:
 
     void create_m_a(double dp, warp_name p, warp_name n)
     {
-        dp *= 0.1;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = M_PI_2 * dp / (proc_size.height * 0.5);
@@ -175,7 +174,6 @@ public:
 
     void create_m_b(double dp, warp_name p, warp_name n)
     {
-        dp *= 0.1;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = M_PI_2 * dp / (proc_size.width * 0.5);
@@ -199,7 +197,6 @@ public:
 
     void create_m_c(double dp, warp_name p, warp_name n)
     {
-        dp *= 0.1;
         double cy = proc_size.height * 0.5;
         double cx = proc_size.width  * 0.5;
         double theta = atan2(dp, std::max(proc_size.width, proc_size.height)*0.5);
@@ -284,7 +281,7 @@ public:
                 state_current[best.axis] += best.delta * scale * d / cam[fy];
                 break;
             case(z):
-                state_current[best.axis] += best.delta *  d;
+                state_current[best.axis] += best.delta * d;
                 break;
             case(a):
                 perform_rotation(state_current, 0, best.delta);
@@ -296,17 +293,20 @@ public:
                 perform_rotation(state_current, 2, best.delta);
                 break;
         }
-        cv::remap(projection.img_warp, projection.img_warp, best.rmp, best.rmsp, cv::INTER_LINEAR);
-        warp_history.push_back(&best);
+        //cv::remap(projection.img_warp, projection.img_warp, best.rmp, best.rmsp, cv::INTER_LINEAR);
+        //warp_history.push_back(&best);
     }
 
     bool update_all_possible()
     {
-        int prev_history_length = warp_history.size();
-        for(auto &warp : warps)
-            if(warp.score > projection.score)
+        bool updated = false;
+        for(auto &warp : warps) {
+            if(warp.score > projection.score) {
                 update_state(warp);
-        return warp_history.size() > prev_history_length;
+                updated = true;
+            }
+        }
+        return updated;
     }
 
     bool update_from_max()
@@ -325,7 +325,7 @@ public:
 
     bool update_heuristically()
     {
-        int prev_history_length = warp_history.size();
+        bool updated = false;
         //best of x axis and roation around y (yaw)
         warp_bundle *best;
         best = &projection;
@@ -338,6 +338,7 @@ public:
         if (warps[bp2].score > best->score) best = &warps[bp2];
         if (warps[bn2].score > best->score) best = &warps[bn2];
         if(best != &projection) update_state(*best);
+        updated = updated || best != &projection;
 
         //best of y axis and rotation around x (pitch)
         best = &projection;
@@ -350,6 +351,7 @@ public:
         if (warps[ap2].score > best->score) best = &warps[ap2];
         if (warps[an2].score > best->score) best = &warps[an2];
         if(best != &projection) update_state(*best);
+        updated = updated || best != &projection;
 
         //best of roll
         best = &projection;
@@ -358,6 +360,7 @@ public:
         if (warps[cp2].score > best->score) best = &warps[cp2];
         if (warps[cn2].score > best->score) best = &warps[cn2];
         if(best != &projection) update_state(*best);
+        updated = updated || best != &projection;
 
         //best of z
         best = &projection;
@@ -366,8 +369,9 @@ public:
         if (warps[zp2].score > best->score) best = &warps[zp2];
         if (warps[zn2].score > best->score) best = &warps[zn2];
         if(best != &projection) update_state(*best);
+        updated = updated || best != &projection;
 
-        return warp_history.size() > prev_history_length;
+        return updated;
     }
 
     void score_overlay(double score, cv::Mat image)

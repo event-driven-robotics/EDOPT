@@ -30,9 +30,23 @@ public:
         static cv::Size pblur(blur, blur);
         static cv::Size nblur(2*blur-1, 2*blur-1);
         static double minval, maxval;
-        
-        cv::Canny(input, canny_img, canny_thresh, canny_thresh*canny_scale, 3);
-        canny_img.convertTo(f, CV_32F);
+
+        //cv::GaussianBlur(input, input, cv::Size(3, 3), 0);
+        //cv::normalize(input, input, 0, 255, cv::NORM_MINMAX);
+        //cv::Sobel(input, 
+
+        input.convertTo(canny_img, CV_32F, 0.003921569);
+        cv::Sobel(canny_img, f, CV_32F, 1, 1);
+        f = (cv::max(f, 0.0) + cv::max(-f, 0.0));
+        cv::minMaxLoc(f, &minval, &maxval);
+        cv::threshold(f, f, maxval*0.05, 0, cv::THRESH_TRUNC);
+
+
+        // cv::imshow("temp", f+0.5);
+        //f.copyTo(output);
+        // return;
+        // cv::Canny(input, canny_img, canny_thresh, canny_thresh*canny_scale, 3);
+        // canny_img.convertTo(f, CV_32F);
 
         cv::GaussianBlur(f, pos_hat, pblur, 0);
         cv::GaussianBlur(f, neg_hat, nblur, 0);
@@ -43,9 +57,15 @@ public:
     }
 
     void process_eros(const cv::Mat &input, cv::Mat &output) {
-        static cv::Mat eros_blurred, eros_f;
-        cv::GaussianBlur(input, eros_blurred, cv::Size(7, 7), 0);
-        eros_blurred.convertTo(output, CV_32F, 0.003921569);
+        static cv::Mat eros_blurred1, eros_blurred2, eros_f;
+        //cv::GaussianBlur(input, eros_blurred1, cv::Size(5, 5), 0);
+        //cv::GaussianBlur(input, eros_blurred2, cv::Size(9, 9), 0);
+        //eros_blurred1 = eros_blurred1 - eros_blurred2;
+        //cv::normalize(eros_blurred, eros_blurred, 0, 255, cv::NORM_MINMAX);
+        //cv::Canny(eros_blurred, eros_blurred, 240, 250, 3);
+        cv::medianBlur(input, eros_blurred1, 3);
+        cv::GaussianBlur(eros_blurred1, eros_blurred2, cv::Size(3, 3), 0);
+        eros_blurred1.convertTo(output, CV_32F, 0.003921569);
         //cv::normalize(eros_f, eros_fn, 0.0, 1.0, cv::NORM_MINMAX);
     }
 
@@ -72,6 +92,12 @@ public:
 
         // find the bounding rectangle and add some buffer
         img_roi = cv::boundingRect(projected);
+
+        if(img_roi.width == 0) {
+            img_roi = full_roi;
+            return;
+        }
+
         img_roi.x -= buffer;
         img_roi.y -= buffer;
         img_roi.width += buffer * 2;
@@ -84,14 +110,14 @@ public:
         if (img_roi.width >= img_roi.height) {
             proc_roi.width = proc_size.width;
             proc_roi.x = 0;
-            scale = (double)proc_roi.width / img_roi.width;
+            scale = (double)img_roi.width / proc_roi.width;
             double ratio = (double)img_roi.height / img_roi.width;
             proc_roi.height = proc_size.height * ratio;
             proc_roi.y = (proc_size.height - proc_roi.height) * 0.5;
         } else {
             proc_roi.height = proc_size.height;
             proc_roi.y = 0;
-            scale = (double)proc_roi.height / img_roi.height;
+            scale = (double)img_roi.height / proc_roi.height;
             double ratio = (double)img_roi.width / img_roi.height;
             proc_roi.width = proc_size.width * ratio;
             proc_roi.x = (proc_size.width - proc_roi.width) * 0.5;
@@ -113,7 +139,7 @@ public:
         //the projection(roi) is resized to the process size and then processed
         static cv::Mat roi_rgb = cv::Mat::zeros(proc_size, CV_8UC1);
         roi_rgb = 0;
-        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_CUBIC);
+        cv::resize(image(img_roi), roi_rgb(proc_roi), proc_roi.size(), 0, 0, cv::INTER_NEAREST);
         make_template(roi_rgb, proc_proj);
     }
 
