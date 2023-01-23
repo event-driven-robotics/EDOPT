@@ -35,5 +35,15 @@ target_link_libraries(sixdofobject PRIVATE  YARP_init
                                             MetavisionSDK::driver
                                             SI::SuperimposeMesh)
 
+add_executable(luv_render luv_render.cpp projection.h image_processing.h)
+target_compile_features(luv_render PRIVATE cxx_std_17)
+#target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
+target_link_libraries(luv_render PRIVATE  YARP_init
+                                            YARP_os
+                                            event-driven
+                                            ${OpenCV_LIBS}
+                                            pthread
+                                            SI::SuperimposeMesh)
+
 install(TARGETS sixdofobject DESTINATION ${CMAKE_INSTALL_BINDIR})
 

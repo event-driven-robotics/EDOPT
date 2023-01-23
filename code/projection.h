@@ -4,6 +4,19 @@
 #include <opencv2/opencv.hpp>
 #include <yarp/os/all.h>
 
+double extract_yaw(const std::array<double, 7> &q)
+{
+    //x y z w
+    double test = q[0]*q[1] + q[2]*q[3];
+    if (test > 0.499) { // singularity at north pole
+		return 2 * atan2(q[0],q[3]);
+	}
+    double sqx = q[0]*q[0];
+    double sqy = q[1]*q[1];
+    double sqz = q[2]*q[2];
+    return atan2(2*q[1]*q[3]-2*q[0]*q[2] , 1 - 2*sqy - 2*sqz);
+}
+
 std::array<double, 7> q2aa(const std::array<double, 7> &state)
 {
     std::array<double, 7> aa{0};
@@ -76,7 +89,7 @@ SICAD* createProjectorClass(yarp::os::ResourceFinder &config)
     yInfo() << "Creating SICAD class with object: " << object_path
             << "and parameters" << intrinsic_parameters.toString();
     
-    double render_scaler = config.check("render_scaler", Value(1.0)).asFloat64();
+    double render_scaler = config.check("render_scaler", yarp::os::Value(1.0)).asFloat64();
 
     return new SICAD(obj,
                      intrinsic_parameters.find("w").asInt32()*render_scaler,

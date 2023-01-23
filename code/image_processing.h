@@ -6,7 +6,7 @@ class imageProcessing
 {
 public:
     //given parameters
-    int blur{10};
+    int blur{11};
     cv::Size proc_size{cv::Size(100, 100)};
     int canny_thresh{40};
     double canny_scale{3};
