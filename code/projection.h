@@ -4,17 +4,44 @@
 #include <opencv2/opencv.hpp>
 #include <yarp/os/all.h>
 
-double extract_yaw(const std::array<double, 7> &q)
+// double extract_yaw(const std::array<double, 7> &q)
+// {
+//     //x y z w
+//     double test = q[0]*q[1] + q[2]*q[3];
+//     if (test > 0.499) { // singularity at north pole
+// 		return 2 * atan2(q[0],q[3]);
+// 	}
+//     double sqx = q[0]*q[0];
+//     double sqy = q[1]*q[1];
+//     double sqz = q[2]*q[2];
+//     return atan2(2*q[1]*q[3]-2*q[0]*q[2] , 1 - 2*sqy - 2*sqz);
+// }
+
+std::array<double, 3> extract_pyr(const std::array<double, 7> &q)
 {
     //x y z w
-    double test = q[0]*q[1] + q[2]*q[3];
+    const double &qx = q[3], &qy=q[4], &qz=q[5], &qw=q[6];
+    std::array<double, 3> pyr;
+    double test = qx*qy + qz*qw;
     if (test > 0.499) { // singularity at north pole
-		return 2 * atan2(q[0],q[3]);
+        pyr[0] = M_PI_2;
+        pyr[1] = 2 * atan2(qx,qw);
+        pyr[2] = 0.0;
+        return pyr;
 	}
-    double sqx = q[0]*q[0];
-    double sqy = q[1]*q[1];
-    double sqz = q[2]*q[2];
-    return atan2(2*q[1]*q[3]-2*q[0]*q[2] , 1 - 2*sqy - 2*sqz);
+	if (test < -0.499) { // singularity at south pole
+		pyr[0] = -M_PI_2;
+        pyr[1] = -2 * atan2(qx,qw);
+		pyr[2] = 0.0;
+		return pyr;
+	}
+    double sqx = qx*qx;
+    double sqy = qy*qy;
+    double sqz = qz*qz;
+    pyr[0] = asin(2*test);
+    pyr[1] = atan2(2*qy*qy-2*qx*qw, 1 - 2*sqy - 2*sqz);
+	pyr[2] = atan2(2*qx*qw-2*qy*qz, 1 - 2*sqx - 2*sqz);
+    return pyr;
 }
 
 std::array<double, 7> q2aa(const std::array<double, 7> &state)
@@ -206,7 +233,7 @@ std::array<double, 4> quaternion_rotation(const std::array<double, 4> &q1, const
     q3[2] = q1[3]*q2[2] - q1[0]*q2[1] + q1[1]*q2[0] + q1[2]*q2[3];
     normalise_quaternion(q3);
     return q3;
-} 
+}
 
 std::array<double, 4> create_quaternion(int axis, double radians)
 {
@@ -228,6 +255,20 @@ void perform_rotation(std::array<double, 7> &state, int axis, double radians)
     q[1] = state[4];
     q[2] = state[5];
     q[3] = state[6];
+    std::array<double, 4> fq = quaternion_rotation(q, rq);
+    state[3] = fq[0];
+    state[4] = fq[1];
+    state[5] = fq[2];
+    state[6] = fq[3];
+}
+
+void perform_rotation(std::array<double, 7> &state, std::array<double, 3> rads)
+{
+    std::array<double, 4> q = {state[3], state[4], state[5], state[6]};
+    std::array<double, 4>   rq{sin(rads[0]),
+                               sin(rads[1]),
+                               sin(rads[2]),
+                               1 - rq[0]*rq[0] - rq[1]*rq[1] - rq[2]*rq[2]};
     std::array<double, 4> fq = quaternion_rotation(q, rq);
     state[3] = fq[0];
     state[4] = fq[1];
