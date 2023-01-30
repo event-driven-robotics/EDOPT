@@ -39,7 +39,7 @@ std::array<double, 3> extract_pyr(const std::array<double, 7> &q)
     double sqy = qy*qy;
     double sqz = qz*qz;
     pyr[0] = asin(2*test);
-    pyr[1] = atan2(2*qy*qy-2*qx*qw, 1 - 2*sqy - 2*sqz);
+    pyr[1] = atan2(2*qy*qw-2*qx*qz, 1 - 2*sqy - 2*sqz);
 	pyr[2] = atan2(2*qx*qw-2*qy*qz, 1 - 2*sqx - 2*sqz);
     return pyr;
 }
@@ -265,10 +265,11 @@ void perform_rotation(std::array<double, 7> &state, int axis, double radians)
 void perform_rotation(std::array<double, 7> &state, std::array<double, 3> rads)
 {
     std::array<double, 4> q = {state[3], state[4], state[5], state[6]};
-    std::array<double, 4>   rq{sin(rads[0]),
-                               sin(rads[1]),
-                               sin(rads[2]),
-                               1 - rq[0]*rq[0] - rq[1]*rq[1] - rq[2]*rq[2]};
+    std::array<double, 4>   rq{sin(rads[0]*0.5),
+                               sin(rads[1]*0.5),
+                               sin(rads[2]*0.5),
+                               0};
+    rq[3] = 1.0 - rq[0]*rq[0] - rq[1]*rq[1] - rq[2]*rq[2];
     std::array<double, 4> fq = quaternion_rotation(q, rq);
     state[3] = fq[0];
     state[4] = fq[1];

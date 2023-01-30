@@ -6,6 +6,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/video.hpp>
 #include <opencv2/highgui.hpp>
+#include <event-driven/vis.h>
 
 using namespace yarp::os;
 
@@ -63,7 +64,8 @@ public:
     cv::Mat temp_img;
     imageProcessing ip;
     double ang_res{1.0};
-    //const static cv::Vec3b white({255, 255, 255})
+    cv::Vec3b white = {255, 255, 255};
+    ev::vIPT ipt;
     
 
     std::vector<std::vector<cv::Mat>> table;
@@ -76,7 +78,7 @@ public:
             return false;
 
         if(!loadPose(rf, "camera_pose", camera_pose)) return false;
-        if(!loadPose(rf, "object_pose", initial_state)) return false;
+        if(!loadPose(rf, "rendered_pose", initial_state)) return false;
         yarp::os::Bottle &intrinsic_parameters = rf.findGroup("CAMERA_CALIBRATION");
         if (intrinsic_parameters.isNull()) {
             yError() << "Could not load camera parameters";
@@ -90,32 +92,37 @@ public:
                     intrinsic_parameters.find("fy").asInt32());
         temp_img = cv::Mat(img_size, CV_8U);
 
-        if(!rf.check("template_file")) {
-            yError() << "Error Generating Templates: no template file provided";
-            return false;
-        }
-        
-        cv::VideoWriter vid_writer;
-        vid_writer.open(rf.find("template_file").asString(), cv::VideoWriter::fourcc('H','2','6','4'), 10, img_size, false);
-        if(!vid_writer.isOpened()) {
-            yError() << "Could not open video writer";
-            return false;
-        }
-    
+
+
         ang_res = rf.check("angular_resolution", Value(1)).asInt();
         if(ang_res < 0 || ang_res == 7 || ang_res > 10) {
             yError() << "valid angular_resolution [1 2 3 4 5 6 8 9 10]";
             return false;
         }
         tab_entries = 360 / ang_res;
+         yInfo() << "Angular resolution:" << ang_res << "degrees"; 
 
-        
+        int rs = rf.check("rendered_size", Value(240)).asInt();
+        cv::Rect roi(img_centre.x - rs/2, img_centre.y - rs/2, rs, rs);
+        int roi_errors = 0;
+        yInfo() << "Rendering Objects at" << rs << "pixels size";
 
-        yInfo() << "Angular resolution:" << ang_res << "degrees"; 
+        if (!rf.check("template_file")) {
+            yError() << "Error Generating Templates: no template file provided";
+            return false;
+        }
+
+        // THIS IS SAVING AS 3 CHANNEL VID - CAN WE SAVE AS 1 CHANNEL!?!
+        //cv::VideoWriter::fourcc('x','2','6','4')
+        cv::VideoWriter vid_writer;
+        vid_writer.open(rf.find("template_file").asString(), cv::VideoWriter::fourcc('H','2','6','4'), 10, cv::Size(rs, rs), false);
+        if(!vid_writer.isOpened()) {
+            yError() << "Could not open video writer";
+            return false;
+        }
 
 
         yInfo() << "Generating Projections";
-
         std::array<double, 7> temp_state;
         std::array<double, 3> pyr = extract_pyr(initial_state);
         std::array<double, 3> rotations = {0};
@@ -129,24 +136,30 @@ public:
                 temp_state = initial_state;
                 perform_rotation(temp_state, rotations);
                 si_cad->superimpose(q2aa(temp_state), q2aa(camera_pose), temp);
-                cvRect det_roi = cv::boundingRect(temp);
+                cv::Rect det_roi = cv::boundingRect(temp);
+                cv::Rect roi_check = det_roi & roi;
+                if(roi_check.area() < det_roi.area())
+                    roi_errors++;
+
                 ip.make_template(temp, temp32F);
                 temp32F.convertTo(temp, CV_8U, 127, 127);
-                vid_writer << temp;
-                //cv::rectangle(temp, cv::Rect(0, temp.rows*0.95, temp.cols*a/tab_entries, temp.rows*0.05), cv::Vec3b(255, 255, 255), cv::FILLED);
-                //cv::imshow("table", temp);
-                //cv::waitKey(1);
+                vid_writer << temp(roi);
+                cv::rectangle(temp, cv::Rect(0, temp.rows*0.95, temp.cols*a/tab_entries, temp.rows*0.05), white, cv::FILLED);
+                cv::rectangle(temp, det_roi, white);
+                cv::rectangle(temp, roi, white);
+                cv::imshow("table", temp);
+                cv::waitKey(1);
             }
             std::cout << a*100/tab_entries << "%        \r";
             std::cout.flush();
         }
         std::cout << "Done        " << std::endl;
+        yInfo() << (100 * roi_errors)/(tab_entries*tab_entries) 
+                << "% ("<< roi_errors 
+                <<") mis-aligned rois. Consider changing the render_pose to reduce this.";
         
-        //cv::destroyWindow("table");
+        cv::destroyWindow("table");
         vid_writer.release();
-
-        
-
 
         return true;
 
@@ -177,30 +190,21 @@ public:
         }
         ang_res = 360 / tab_entries;
 
-        cv::Mat onemat, onemat32;
-
-        double tic = Time::now();
-        for(int i = 0; i < 1000; i++) {
-            int k = ((double)rand() / RAND_MAX)*total_frames;
-            input_video.set(cv::CAP_PROP_POS_FRAMES, k);
-            input_video.read(onemat);
-            onemat.convertTo(onemat32, CV_32F, 1.0/127.0, -1);
-        }
-        yInfo() << 1000*(Time::now() - tic) / 1000 << "ms per image";
-        return false;
-            
-            
-
-
         yInfo() << "Loading Templates";
-        cv::Mat frame, frame32F;
+        bool warn = false;
+        cv::Mat frame, frameg, frame32F;
         table.resize(tab_entries);
         for(int a = 0; a < tab_entries; a++) {
             table[a].resize(tab_entries);
             for(int b = 0; b < tab_entries; b++) {
                 input_video >> frame;
-                //cv::imshow("loaded data", frame);
-                //frame.convertTo(table[a][b], CV_32F, 1.0/127.0, -1);
+                if(frame.channels() > 1) {
+                    warn = true;
+                    cv::cvtColor(frame, frameg, cv::COLOR_BGR2GRAY);
+                    frameg.convertTo(table[a][b], CV_32F, 1.0/127.0, -1);
+                } else {
+                    frame.convertTo(table[a][b], CV_32F, 1.0/127.0, -1);
+                }
                 //frame.copyTo(table[a][b]);
                 // frame.convertTo(
                 // table[a][b] 
@@ -210,6 +214,9 @@ public:
             std::cout.flush();
         }
         std::cout << "Done        " << std::endl;
+        if(warn)
+            yInfo() << "Saved video is 3 Channel - consider saving as 1 channel";
+
         
         return true;
 
@@ -237,29 +244,6 @@ public:
                     intrinsic_parameters.find("fy").asInt32());
         temp_img = cv::Mat(img_size, CV_8U);
 
-        yInfo() << "Generating Projections";
-
-        std::array<double, 7> temp_state;
-        std::array<double, 3> pyr = extract_pyr(initial_state);
-        std::array<double, 3> rotations = {0};
-        
-        cv::Mat temp;
-        si_cad->superimpose(q2aa(initial_state), q2aa(camera_pose), temp);
-        ang_res = 360 / tab_entries;
-        for(int a = 0; a < tab_entries; a++) {
-            rotations[1] = (ang_res * a * M_PI / 180.0) - M_PI + pyr[1];
-            for(int b = 0; b < tab_entries; b++) {
-                rotations[0] = (ang_res * b * M_PI / 180.0) - M_PI + pyr[0];
-                temp_state = initial_state;
-                perform_rotation(temp_state, rotations);
-                si_cad->superimpose(q2aa(temp_state), q2aa(camera_pose), temp);
-                ip.make_template(temp, table[b][a]);
-                //cv::imshow("table", table[b][a]);
-                //cv::waitKey(1);
-            }
-            yInfo() << (a*100) / tab_entries << "%";
-        }
-        //cv::destroyWindow("table");
         return true;
     }
 
@@ -274,57 +258,71 @@ public:
         //calculate alpha and beta
         //get the current state and rotate it by the viewing angle
         double xd = (state[0]-initial_state[0]);
-        double zd = (state[2]-initial_state[2]);
         double yd = (state[1]-initial_state[1]);
+        double zd = (state[2]-initial_state[2]);
 
         double pxd = xd * img_f.x / state[2];
         double pyd = yd * img_f.y / state[2];
 
 
-        std::array<double, 3> pyr = extract_pyr(state);
+        auto compensated = state;
+        double yawish = -atan2(state[0], state[2]);
+        //yInfo() << state[2] << " " << state[0] << " " << yawish;
+        perform_rotation(compensated, {0, yawish, 0});
+        //perform_rotation(compensated, 1, atan2(state[2], state[1]));
+        //perform_rotation(compensated, {0, 0.1, 0});
+        //std::cout << "YAW: " << yawish * 180.0 / M_PI;
+        std::array<double, 3> pyr = extract_pyr(compensated);
 
-        pyr[1] -= atan2(state[0], state[2]);
+        //pyr[1] += atan2(state[2], state[0]);
 
 
         //get the image with the correct rotation, then apply the 
         //required affine
-        cv::Mat &entry = query_table(0, pyr[1]);
+        yInfo() << pyr[0] << " " << pyr[1] << " " << pyr[2];
+        cv::Mat &entry = query_table(pyr[0], pyr[1]);
         if(entry.empty()) {
             yError() << "Empty table entry";
             return;
         }
-        roi = cv::Rect(175, 86, 300, 300);
+        //roi = cv::Rect(175, 86, 300, 300);
 
         //then affine transform for the other components
         img.setTo(0);
-        if(!fast_affine(entry, img, roi, pxd, pyd, 0, 1.0))
+        if(!fast_affine(entry, img, pxd, pyd, 0, 1.0))
             std::cout << "scale too big" << std::endl;
 
     }
 
     //assume input and output are the same size.
-    bool fast_affine(cv::Mat &input, cv::Mat &output, cv::Rect roi, int dx, int dy, double roll, double scale)
+    bool fast_affine(cv::Mat &input, cv::Mat &output, int dx, int dy, double roll, double scale)
     {
         //dy = -dy;
 
-        cv::Mat rot = cv::getRotationMatrix2D(cv::Point(roi.width/2, roi.height/2), roll, scale);
+        cv::Rect input_roi(0, 0, input.cols, input.rows);
+
+        cv::Mat rot = cv::getRotationMatrix2D(cv::Point(input_roi.width/2, input_roi.height/2), roll, 1.0);
 
         //the output roi needs to be modified to include the scale.
 
-        int x_offset = (roi.width - roi.width*scale)*0.5;
-        int y_offset = (roi.height - roi.height*scale)*0.5;
-
         //first we need to rotate and scale in place
-        cv::Rect output_roi(roi.x+dx+x_offset, roi.y+dy+y_offset, roi.width*scale, roi.height*scale);
-        output_roi &= cv::Rect(0, 0, output.cols, output.rows);
-        if(scale > 1.0)
-            roi = cv::Rect(roi.x+x_offset, roi.y+y_offset, roi.width*scale, roi.height*scale);
+        cv::Rect output_roi = input_roi 
+                            + cv::Point(img_centre.x, img_centre.y) 
+                            - cv::Point(input_roi.width/2, input_roi.height/2) 
+                            + cv::Point(dx, dy); 
 
-        if(roi.x < 0 || roi.y < 0 || roi.x+roi.width > input.cols || roi.y + roi.height > input.rows)
-            return false;
-        //input(roi).copyTo(output(output_roi));
+        output_roi &= cv::Rect(0, 0, output.cols, output.rows);
+        input_roi = output_roi
+                    - cv::Point(img_centre.x, img_centre.y) 
+                    + cv::Point(input_roi.width/2, input_roi.height/2) 
+                    - cv::Point(dx, dy);
         
-        cv::warpAffine(input(roi), output(output_roi), rot, output_roi.size());
+        //input(input_roi).copyTo(output(output_roi));
+        
+        
+        cv::warpAffine(input(input_roi), output(output_roi), rot, output_roi.size());
+        
+        //to scale we need to resize the final image
 
         return true;
 
@@ -332,11 +330,11 @@ public:
 
     cv::Mat &query_table(double pitch, double yaw)
     {
-        int a = (int)(((180.0 *    yaw / M_PI) + 180.0)/ang_res - 0.5)%tab_entries;
-        int b = (int)(((180.0 *  pitch / M_PI) + 180.0)/ang_res - 0.5)%tab_entries;
-        //yInfo() << pitch * 180.0/M_PI << " ->" << b;
-        //yInfo() << yaw * 180.0/M_PI << " ->" << a; 
-        return table[b][a];
+        int a = (int)(((180.0 *  pitch / M_PI) + 180.0)/ang_res + 0.5)%tab_entries;
+        int b = (int)(((180.0 *    yaw / M_PI) + 180.0)/ang_res + 0.5)%tab_entries;
+        //yInfo() << "pitch" << pitch * 180.0/M_PI << " ->" << b;
+        //yInfo() << "yaw" << yaw * 180.0/M_PI << " ->" << a; 
+        return table[a][b];
     }
 
 };
@@ -353,7 +351,7 @@ void show_image()
     // cv::moveWindow("GPU", 1920+800, 10);
 
     while(run_flag)
-        if(cv::waitKey(wait_time) == 27);
+        if(cv::waitKey(wait_time) == 'q');
             run_flag = false;
 }
 
@@ -390,7 +388,7 @@ int main(int argc, char* argv[])
     
     state = initial_state;
 
-    //luvr.configure(rf);
+    luvr.configure(rf);
     if(!luvr.load_templates(rf)) {
         if(!luvr.generate_templates(rf)) {
             yError() << "Could not load or generate templates";
@@ -401,8 +399,6 @@ int main(int argc, char* argv[])
             return false;
         }
     }
-    wait_time = 0;
-    return true;
     //luvr.generate_templates(rf);
     // luvr.load_templates(rf);
     // return 0;
@@ -421,7 +417,8 @@ int main(int argc, char* argv[])
     luvr.render_gpu(state, img_gpu, roi_gpu);
     int cs = 1;
 
-    double increment = 0.1;
+    //while(true) {
+    double increment = 0.05;
     for(double x = -50.0; x < 50; x+=increment) {
         for(double y = 0; y < increment; y+=increment) {
         state[0] = x;
@@ -451,6 +448,7 @@ int main(int argc, char* argv[])
 
         //cv::rectangle(img_gpu, roi_gpu, cv::Vec3b(255, 255, 255));
         cv::Mat merged = make_visualisation(img_luv, temp);
+        //cv::Mat merged = img_luv + temp;
         cv::imshow("LUV vs GPU", merged);
 
         //Time::delay(0.001);
@@ -458,11 +456,15 @@ int main(int argc, char* argv[])
         //perform_rotation(state, 0, increment);
         // if(cv::waitKey(1) == 27)
         //     break;
-
-        }
         if(run_flag == false)
             break;
+        }
+        if (run_flag == false)
+        break;
     }
+    // if (run_flag == false)
+    //     break;
+    // }
     std::cout <<  gpu_time / count <<" <-GPU | LUV-> " <<  luv_time / count << std::endl;
     gpu_time = 0.0, luv_time = 0.0, count = 0.0;
     wait_time = 3000;
