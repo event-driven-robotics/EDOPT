@@ -267,8 +267,9 @@ public:
 
         auto compensated = state;
         double yawish = -atan2(state[0], state[2]);
+        double pitchish = atan2(state[1], state[2]);
         //yInfo() << state[2] << " " << state[0] << " " << yawish;
-        perform_rotation(compensated, {0, yawish, 0});
+        perform_rotation(compensated, {pitchish, yawish, 0});
         //perform_rotation(compensated, 1, atan2(state[2], state[1]));
         //perform_rotation(compensated, {0, 0.1, 0});
         //std::cout << "YAW: " << yawish * 180.0 / M_PI;
@@ -279,7 +280,7 @@ public:
 
         //get the image with the correct rotation, then apply the 
         //required affine
-        yInfo() << pyr[0] << " " << pyr[1] << " " << pyr[2];
+        //yInfo() << pyr[0] << " " << pyr[1] << " " << pyr[2];
         cv::Mat &entry = query_table(pyr[0], pyr[1]);
         if(entry.empty()) {
             yError() << "Empty table entry";
@@ -418,11 +419,11 @@ int main(int argc, char* argv[])
     int cs = 1;
 
     //while(true) {
-    double increment = 0.05;
-    for(double x = -50.0; x < 50; x+=increment) {
-        for(double y = 0; y < increment; y+=increment) {
+    double increment = 1;
+    for(double x = -30.0; x < 30; x+=increment) {
+        for(double y = -20; y < 20; y+=increment) {
         state[0] = x;
-        //state[1] = y;
+        state[1] = y;
 
         auto t1 = high_resolution_clock::now();
         for(int i = 0; i < cs; i++)
