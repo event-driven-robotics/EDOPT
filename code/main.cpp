@@ -41,6 +41,7 @@ private:
     //handlers
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
+    //ARESfromYARP eros_handler;
     imageProcessing img_handler;
     warpManager warp_handler;
 
@@ -56,6 +57,7 @@ private:
     double toc_eros{0}, toc_proj{0}, toc_projproc{0}, toc_warp{0};
     int toc_count{0};
     int proj_count{0}, warp_count{0};
+    int vis_type{0};
 
     //output
     std::ofstream fs;
@@ -78,7 +80,8 @@ public:
         eros_d = rf.check("eros_d", Value(0.7)).asFloat64();
         period = rf.check("period", Value(0.1)).asFloat64();
         dp2 = rf.check("dp2") && rf.check("dp2", Value(true)).asBool(); //default false
-        run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
+        //run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
+        run = rf.check("run", Value(false)).asBool();
         parallel_method = rf.check("parallel") && rf.check("parallel", Value(true)).asBool(); // defaulat false
         render_scaler = rf.check("render_scaler", Value(1.0)).asFloat64();
 
@@ -127,13 +130,13 @@ public:
         cv::resizeWindow("EROS", img_size);
         cv::moveWindow("EROS", 1920, 100);
 
-        cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
-        cv::resizeWindow("Translations", img_size);
-        cv::moveWindow("Translations", 0, 540);
+        // cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
+        // cv::resizeWindow("Translations", img_size);
+        // cv::moveWindow("Translations", 0, 540);
 
-        cv::namedWindow("Rotations", cv::WINDOW_AUTOSIZE);
-        cv::resizeWindow("Rotations", img_size);
-        cv::moveWindow("Rotations", 700, 540);
+        // cv::namedWindow("Rotations", cv::WINDOW_AUTOSIZE);
+        // cv::resizeWindow("Rotations", img_size);
+        // cv::moveWindow("Rotations", 700, 540);
 
         //quaternion_test();
         //quaternion_test_camera();
@@ -186,15 +189,21 @@ public:
         //vis = warp_handler.make_visualisation(eros_u);
         //proj_rgb.copyTo(proj_vis); 
         //img_handler.process_eros(eros_handler.eros.getSurface(), eros_vis);
+        cv::medianBlur(eros_handler.eros.getSurface(), eros_vis, 3);
+        cv::GaussianBlur(eros_vis, eros_vis, cv::Size(3, 3), 0);
         cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
         cv::resize(eros_vis, eros_vis, img_size);
         cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
-        vis = proj_vis + eros_vis*0.5;
-        cv::rectangle(vis, img_handler.img_roi, cv::Scalar(255, 255, 255));
-        static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
-        warps_t = warp_handler.create_translation_visualisation();
-        static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
-        warps_r = warp_handler.create_rotation_visualisation();
+        if(vis_type == 0)
+            vis = proj_vis + eros_handler.eros.getSurface();
+        else
+            vis = proj_vis + eros_handler.event_image;
+        eros_handler.event_image.setTo(0);
+        //cv::rectangle(vis, img_handler.img_roi, cv::Scalar(255, 255, 255));
+        // static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
+        // warps_t = warp_handler.create_translation_visualisation();
+        // static cv::Mat warps_r = cv::Mat::zeros(100, 100, CV_8U);
+        // warps_r = warp_handler.create_rotation_visualisation();
         //cv::flip(vis, vis, 1);
         
         std::string rate_string = "- Hz";
@@ -206,18 +215,27 @@ public:
         cv::putText(vis, ss.str(), cv::Point(640-160, 480-10), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(200, 200, 200));
 
         cv::imshow("EROS", vis);
-        cv::imshow("Translations", warps_t+0.5);
-        cv::imshow("Rotations", warps_r+0.5);
-        
+        //cv::imshow("Translations", warps_t+0.5);
+        //cv::imshow("Rotations", warps_r+0.5);
+        static bool stop_running = false;
+        if(stop_running) {
+            run = stop_running = false;
+        }
         int c = cv::waitKey(1);
-        if (c == 32)
+        if (c == 32) {
+            state = initial_state;
             warp_handler.set_current(initial_state);
+            stop_running = true;
+        }
         if (c == 'g')
             run = true;
         if(c == 27) {
             stopModule();
             return false;
         }
+
+        if(c == 'v')
+            vis_type = (++vis_type % 2);
 
         // yInfo() << cv::sum(cv::sum(warp_handler.warps[predictions::z].img_warp))[0]
         //         << cv::sum(cv::sum(warp_handler.projection.img_warp))[0];

@@ -8,6 +8,8 @@ using namespace yarp::os;
 #include <event-driven/algs.h>
 #include <event-driven/vis.h>
 
+#include "erosplus.h"
+
 class EROSdirect
 {
 public:
@@ -81,6 +83,55 @@ public:
     ev::EROS eros;
     std::thread eros_worker;
     double tic{-1};
+    cv::Mat event_image;
+
+    void erosUpdate() 
+    {
+        while (!input_port.isStopping()) {
+            ev::info my_info = input_port.readAll(true);
+            tic = my_info.timestamp;
+            for(auto &v : input_port) {
+                eros.update(v.x, v.y);
+                if(v.p)
+                    event_image.at<cv::Vec3b>(v.y, v.x) = cv::Vec3b(255, 255, 255);
+                else 
+                    event_image.at<cv::Vec3b>(v.y, v.x) = cv::Vec3b(255, 0, 0);
+                
+            }
+        }
+    }
+
+public:
+    bool start(cv::Size resolution, std::string sourcename, std::string portname, int k = 5, double d = 0.3)
+    {
+        eros.init(resolution.width, resolution.height, k, d);
+        event_image = cv::Mat(resolution, CV_8UC3, cv::Vec3b(0, 0, 0));
+
+        if (!input_port.open(portname))
+            return false;
+        yarp::os::Network::connect(sourcename, portname, "fast_tcp");
+
+        eros_worker = std::thread([this]{erosUpdate();});
+        return true;
+    }
+
+    void stop()
+    {
+        input_port.stop();
+        eros_worker.join();
+    }
+
+};
+
+class ARESfromYARP
+{
+public:
+
+    ev::window<ev::AE> input_port;
+    erosplus eros;
+    std::thread eros_worker;
+    double tic{-1};
+    cv::Mat event_image;
 
     void erosUpdate() 
     {
@@ -95,7 +146,8 @@ public:
 public:
     bool start(cv::Size resolution, std::string sourcename, std::string portname, int k = 5, double d = 0.3)
     {
-        eros.init(resolution.width, resolution.height, k, d);
+        eros.init(resolution.width, resolution.height, 7, 0.05, 0.003);
+        event_image = cv::Mat(resolution, CV_8UC3, cv::Vec3b(0, 0, 0));
 
         if (!input_port.open(portname))
             return false;
