@@ -21,6 +21,10 @@ color_dragon = '#A80000'
 color_gelating = '#040276'
 color_mustard = '#A89800'
 
+color_blue = '#1A589F'
+color_purple = '#742C81' 
+color_yellow = '#FFA62B' 
+
 SMALL_SIZE = 18
 MEDIUM_SIZE = 20
 
@@ -137,6 +141,18 @@ def cleanEuler(angle, angle_type):
 
     return(np.array(filtered_angles_list))
     
+def cleanEuler2(angle_list):
+        
+    for idx in range(len(angle_list)-1):
+        a0 = angle_list[idx]
+        a1 = angle_list[idx+1]
+        real_val = [a1, a1 + 360, a1 - 360]
+        abs_diff = np.abs(real_val-a0)
+    
+        angle_list[idx+1] = real_val[np.argmin(abs_diff)]
+    
+    return (np.array(angle_list))
+
 # ---------------------------------------------------------------------------  DRAGON  ---------------------------------------------------------------------------------------
 
 filePath_dataset = '/home/luna/shared/data/6-DOF-Objects/results_icra_2024/dragon/'
@@ -183,6 +199,7 @@ gt_trans_z_new = np.genfromtxt(os.path.join(filePath_dataset, 'gt_new_dataset/z.
 gt_roll_new = np.genfromtxt(os.path.join(filePath_dataset, 'gt_new_dataset/roll.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 gt_pitch_new = np.genfromtxt(os.path.join(filePath_dataset, 'gt_new_dataset/pitch.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 gt_yaw_new = np.genfromtxt(os.path.join(filePath_dataset, 'gt_new_dataset/yaw.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
+gt_6dof = np.genfromtxt(os.path.join(filePath_dataset, 'gt_new_dataset/6dof.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 
 gt_trans_x_new['t'] = (gt_trans_x_new['t']-gt_trans_x_new['t'][0])
 gt_trans_x_new['x'] = gt_trans_x_new['x']*0.01
@@ -214,12 +231,18 @@ gt_yaw_new['x'] = gt_yaw_new['x']*0.01
 gt_yaw_new['y'] = gt_yaw_new['y']*0.01
 gt_yaw_new['z'] = gt_yaw_new['z']*0.01
 
+gt_6dof['t'] = (gt_6dof['t']-gt_6dof['t'][0])
+gt_6dof['x'] = gt_6dof['x']*0.01
+gt_6dof['y'] = gt_6dof['y']*0.01
+gt_6dof['z'] = gt_6dof['z']*0.01
+
 edopt_trans_x = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/x.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 edopt_trans_y = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/y.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 edopt_trans_z = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/z.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 edopt_roll = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/roll.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 edopt_pitch = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/pitch.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 edopt_yaw = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/yaw.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
+edopt_6dof = np.genfromtxt(os.path.join(filePath_dataset, 'edopt/6dof.csv'), delimiter=",", names=["t", "x", "y", "z", "qx", "qy", "qz", "qw"])
 
 rgbde_trans_x = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/dragon_translation_x_1_m_s_2_tracked_pose_quaternion.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
 rgbde_trans_y = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/dragon_translation_y_1_m_s_tracked_pose_quaternion.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
@@ -227,6 +250,8 @@ rgbde_trans_z = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/dragon_tran
 rgbde_roll = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/dragon_roll_4rad_s_tracked_pose_quaternion.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
 rgbde_pitch = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/dragon_pitch_4rad_s_tracked_pose_quaternion.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
 rgbde_yaw = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/dragon_yaw_2_tracked_pose_quaternion.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
+rgbde_6dof = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/6DoF_1_tracked_pose_quaternion_corrected.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
+rgbde_6dof_5 = np.genfromtxt(os.path.join(filePath_dataset, 'rgbd-e/6DoF_2_tracked_pose_quaternion.csv'), delimiter=",", names=["x", "y", "z", "qw", "qx", "qy", "qz"])
 
 rgbde_time_trans_x = (np.arange(0, 1/60*len(rgbde_trans_x['x']), 1/60))*10
 rgbde_time_trans_y = (np.arange(0, 1/60*len(rgbde_trans_y['x']), 1/60))*10
@@ -234,6 +259,9 @@ rgbde_time_trans_z = (np.arange(0, 1/60*len(rgbde_trans_z['x']), 1/60))*10
 rgbde_time_roll = (np.arange(0, 1/60*len(rgbde_roll['qx']), 1/60))*10
 rgbde_time_pitch = (np.arange(0, 1/60*len(rgbde_pitch['qx']), 1/60))*10
 rgbde_time_yaw = (np.arange(0, 1/60*len(rgbde_yaw['qx']), 1/60))*10
+rgbde_time_6dof = (np.arange(0, 1/60*len(rgbde_6dof['x']), 1/60))
+rgbde_time_6dof_5 = (np.arange(0, 1/5*len(rgbde_6dof_5['x']), 1/5))
+
 
 edopt_trans_x_resampled_x = resampling_by_interpolate(gt_trans_x_new['t'], edopt_trans_x['t'], edopt_trans_x['x'])
 edopt_trans_x_resampled_y = resampling_by_interpolate(gt_trans_x_new['t'], edopt_trans_x['t'], edopt_trans_x['y'])
@@ -330,6 +358,22 @@ rgbde_yaw_resampled_qx = resampling_by_interpolate(gt_yaw_old['t'], rgbde_time_y
 rgbde_yaw_resampled_qy = resampling_by_interpolate(gt_yaw_old['t'], rgbde_time_yaw, rgbde_yaw['qy'])
 rgbde_yaw_resampled_qz = resampling_by_interpolate(gt_yaw_old['t'], rgbde_time_yaw, rgbde_yaw['qz'])
 rgbde_yaw_resampled_qw = resampling_by_interpolate(gt_yaw_old['t'], rgbde_time_yaw, rgbde_yaw['qw'])
+
+edopt_6dof_resampled_x = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['x'])
+edopt_6dof_resampled_y = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['y'])
+edopt_6dof_resampled_z = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['z'])
+edopt_6dof_resampled_qx = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['qx'])
+edopt_6dof_resampled_qy = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['qy'])
+edopt_6dof_resampled_qz = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['qz'])
+edopt_6dof_resampled_qw = resampling_by_interpolate(gt_6dof['t'], edopt_6dof['t'], edopt_6dof['qw'])
+
+rgbde_6dof_resampled_x = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['x'])
+rgbde_6dof_resampled_y = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['y'])
+rgbde_6dof_resampled_z = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['z'])
+rgbde_6dof_resampled_qx = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['qx'])
+rgbde_6dof_resampled_qy = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['qy'])
+rgbde_6dof_resampled_qz = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['qz'])
+rgbde_6dof_resampled_qw = resampling_by_interpolate(gt_6dof['t'], rgbde_time_6dof, rgbde_6dof['qw'])
 
 edopt_trans_x_alpha,edopt_trans_x_beta,edopt_trans_x_gamma = quaternion_to_euler_angle(edopt_trans_x['qw'], edopt_trans_x['qx'], edopt_trans_x['qy'], edopt_trans_x['qz'])
 rgbde_trans_x_alpha,rgbde_trans_x_beta,rgbde_trans_x_gamma = quaternion_to_euler_angle(rgbde_trans_x['qw'], rgbde_trans_x['qx'], rgbde_trans_x['qy'], rgbde_trans_x['qz'])
@@ -453,8 +497,128 @@ gt_yaw_alpha_cleaned_new = cleanEuler(gt_yaw_alpha_new,0)
 gt_yaw_beta_cleaned_new = cleanEuler(gt_yaw_beta_new,1)
 gt_yaw_gamma_cleaned_new = cleanEuler(gt_yaw_gamma_new,2)
 
+edopt_6dof_alpha,edopt_6dof_beta,edopt_6dof_gamma = quaternion_to_euler_angle(edopt_6dof['qw'], edopt_6dof['qx'], edopt_6dof['qy'], edopt_6dof['qz'])
+rgbde_6dof_alpha,rgbde_6dof_beta,rgbde_6dof_gamma = quaternion_to_euler_angle(rgbde_6dof['qw'], rgbde_6dof['qx'], rgbde_6dof['qy'], rgbde_6dof['qz'])
+rgbde_6dof_alpha_5,rgbde_6dof_beta_5,rgbde_6dof_gamma_5 = quaternion_to_euler_angle(rgbde_6dof_5['qw'], rgbde_6dof_5['qx'], rgbde_6dof_5['qy'], rgbde_6dof_5['qz'])
+gt_6dof_alpha,gt_6dof_beta,gt_6dof_gamma = quaternion_to_euler_angle(gt_6dof['qw'], gt_6dof['qx'], gt_6dof['qy'], gt_6dof['qz'])
+
+edopt_6dof_alpha_cleaned = cleanEuler2(edopt_6dof_alpha)
+edopt_6dof_beta_cleaned = cleanEuler2(edopt_6dof_beta)
+edopt_6dof_gamma_cleaned = cleanEuler2(edopt_6dof_gamma)
+
+rgbde_6dof_alpha_cleaned = cleanEuler2(rgbde_6dof_alpha)
+rgbde_6dof_beta_cleaned = cleanEuler2(rgbde_6dof_beta)
+rgbde_6dof_gamma_cleaned = cleanEuler2(rgbde_6dof_gamma)
+
+rgbde_6dof_alpha_cleaned_5 = cleanEuler2(rgbde_6dof_alpha_5)
+rgbde_6dof_beta_cleaned_5 = cleanEuler2(rgbde_6dof_beta_5)
+rgbde_6dof_gamma_cleaned_5 = cleanEuler2(rgbde_6dof_gamma_5)
+
+gt_6dof_alpha_cleaned = cleanEuler2(gt_6dof_alpha)
+gt_6dof_beta_cleaned = cleanEuler2(gt_6dof_beta)
+gt_6dof_gamma_cleaned = cleanEuler2(gt_6dof_gamma)
+
+overlapping0 = 0.8
 overlapping1 = 1
-overlapping2 = 0.3
+overlapping2 = 1
+
+plt.figure(figsize=(18,6))
+plt.plot(gt_6dof['t'], gt_6dof['x'], color='k',  lw=4, alpha=overlapping0, ls='-', label='ground truth')
+plt.plot(gt_6dof['t'], gt_6dof['y'], color='k',  lw=4, alpha=overlapping0, ls='-')
+plt.plot(gt_6dof['t'], gt_6dof['z'], color='k',  lw=4, alpha=overlapping0, ls='-')
+
+plt.plot(rgbde_time_6dof, rgbde_6dof['x'],  color=color_z,  lw=2, alpha=overlapping2, label='RGB-D-E 60 Hz')
+plt.plot(rgbde_time_6dof, rgbde_6dof['y'],  color=color_z,  lw=2, alpha=overlapping2)
+plt.plot(rgbde_time_6dof, rgbde_6dof['z'],  color=color_z,  lw=2, alpha=overlapping2)
+
+plt.plot(rgbde_time_6dof_5, rgbde_6dof_5['x'],  color=color_blue,  lw=2, alpha=overlapping2, label='RGB-D-E 5 Hz')
+plt.plot(rgbde_time_6dof_5, rgbde_6dof_5['y'],  color=color_blue,  lw=2, alpha=overlapping2)
+plt.plot(rgbde_time_6dof_5, rgbde_6dof_5['z'],  color=color_blue,  lw=2, alpha=overlapping2)
+
+plt.plot(edopt_6dof['t'],edopt_6dof['x'], color=color_y, lw=3, alpha=overlapping1, ls=':', label='EDOPT')
+plt.plot(edopt_6dof['t'],edopt_6dof['y'], color=color_y, lw=3, alpha=overlapping1, ls=':')
+plt.plot(edopt_6dof['t'],edopt_6dof['z'], color=color_y, lw=3, alpha=overlapping1, ls=':')
+
+# plt.xlabel("Time [s]")
+plt.ylabel("Position [m]")
+
+plt.xticks([])
+
+plt.legend(bbox_to_anchor=(0.1, 1.02, 0, 0.2), loc='lower left', ncol=4)
+
+plt.text(-0.3, 0.75, 'z', fontsize = 23)
+plt.text(-0.3, -0.05, 'y', fontsize = 23)
+plt.text(-0.3, -0.25, 'x', fontsize = 23)
+
+plt.show()
+
+plt.figure(figsize=(18,6))
+
+plt.plot(gt_6dof['t'], gt_6dof_alpha_cleaned, color='k',  lw=4, alpha=overlapping0, ls='-', label='ground truth')
+plt.plot(gt_6dof['t'], gt_6dof_beta_cleaned, color='k',  lw=4, alpha=overlapping0, ls='-')
+plt.plot(gt_6dof['t'], gt_6dof_gamma_cleaned, color='k',  lw=4, alpha=overlapping0, ls='-')
+
+plt.plot(rgbde_time_6dof, rgbde_6dof_alpha_cleaned,  color=color_z,  lw=2, alpha=overlapping2, label='RGB-D-E 60 Hz')
+plt.plot(rgbde_time_6dof, rgbde_6dof_beta_cleaned, color=color_z,  lw=2, alpha=overlapping2)
+plt.plot(rgbde_time_6dof, rgbde_6dof_gamma_cleaned, color=color_z,  lw=2, alpha=overlapping2)
+
+plt.plot(rgbde_time_6dof_5, rgbde_6dof_alpha_cleaned_5,  color=color_blue,  lw=2, alpha=overlapping2, label='RGB-D-E 5 Hz')
+plt.plot(rgbde_time_6dof_5, rgbde_6dof_beta_cleaned_5,  color=color_blue,  lw=2, alpha=overlapping2)
+plt.plot(rgbde_time_6dof_5, rgbde_6dof_gamma_cleaned_5,  color=color_blue,  lw=2, alpha=overlapping2)
+
+plt.plot(edopt_6dof['t'],edopt_6dof_alpha_cleaned, color=color_y, lw=2, alpha=overlapping1, ls=':', label='EDOPT')
+plt.plot(edopt_6dof['t'],edopt_6dof_beta_cleaned, color=color_y, lw=2, alpha=overlapping1, ls=':')
+plt.plot(edopt_6dof['t'],edopt_6dof_gamma_cleaned,  color=color_y, lw=2, alpha=overlapping1, ls=':')
+
+plt.text(-0.3, 140, '$\\gamma$', fontsize = 23)
+plt.text(-0.3, -40, '$\\alpha$', fontsize = 23)
+plt.text(-0.3, -80, '$\\beta$', fontsize = 23)
+
+plt.xlabel("Time [s]")
+plt.ylabel("Rotation [deg]")
+
+plt.show()
+
+fig_multi, axs = plt.subplots(1,2)
+fig_multi.set_size_inches(18, 6)
+axs[0].plot(gt_6dof['t'], gt_6dof['x'], color='k',  lw=4, alpha=overlapping0, ls='-', label='ground truth')
+axs[0].plot(gt_6dof['t'], gt_6dof['y'], color='k',  lw=4, alpha=overlapping0, ls='-')
+axs[0].plot(gt_6dof['t'], gt_6dof['z'], color='k',  lw=4, alpha=overlapping0, ls='-')
+
+axs[0].plot(rgbde_time_6dof, rgbde_6dof['x'],  color=color_z,  lw=2, alpha=overlapping2, label='RGB-D-E 60 Hz')
+axs[0].plot(rgbde_time_6dof, rgbde_6dof['y'],  color=color_z,  lw=2, alpha=overlapping2)
+axs[0].plot(rgbde_time_6dof, rgbde_6dof['z'],  color=color_z,  lw=2, alpha=overlapping2)
+
+axs[0].plot(rgbde_time_6dof_5, rgbde_6dof_5['x'],  color=color_blue,  lw=2, alpha=overlapping2, label='RGB-D-E 5 Hz')
+axs[0].plot(rgbde_time_6dof_5, rgbde_6dof_5['y'],  color=color_blue,  lw=2, alpha=overlapping2)
+axs[0].plot(rgbde_time_6dof_5, rgbde_6dof_5['z'],  color=color_blue,  lw=2, alpha=overlapping2)
+
+axs[0].plot(edopt_6dof['t'],edopt_6dof['x'], color=color_y, lw=3, alpha=overlapping1, ls=':', label='EDOPT')
+axs[0].plot(edopt_6dof['t'],edopt_6dof['y'], color=color_y, lw=3, alpha=overlapping1, ls=':')
+axs[0].plot(edopt_6dof['t'],edopt_6dof['z'], color=color_y, lw=3, alpha=overlapping1, ls=':')
+
+axs[1].plot(gt_6dof['t'], gt_6dof_alpha_cleaned, color='k',  lw=4, alpha=overlapping0, ls='-', label='ground truth')
+axs[1].plot(gt_6dof['t'], gt_6dof_beta_cleaned, color='k',  lw=4, alpha=overlapping0, ls='-')
+axs[1].plot(gt_6dof['t'], gt_6dof_gamma_cleaned, color='k',  lw=4, alpha=overlapping0, ls='-')
+
+axs[1].plot(rgbde_time_6dof, rgbde_6dof_alpha_cleaned,  color=color_z,  lw=2, alpha=overlapping2, label='RGB-D-E 60 Hz')
+axs[1].plot(rgbde_time_6dof, rgbde_6dof_beta_cleaned, color=color_z,  lw=2, alpha=overlapping2)
+axs[1].plot(rgbde_time_6dof, rgbde_6dof_gamma_cleaned, color=color_z,  lw=2, alpha=overlapping2)
+
+axs[1].plot(rgbde_time_6dof_5, rgbde_6dof_alpha_cleaned_5,  color=color_blue,  lw=2, alpha=overlapping2, label='RGB-D-E 5 Hz')
+axs[1].plot(rgbde_time_6dof_5, rgbde_6dof_beta_cleaned_5,  color=color_blue,  lw=2, alpha=overlapping2)
+axs[1].plot(rgbde_time_6dof_5, rgbde_6dof_gamma_cleaned_5,  color=color_blue,  lw=2, alpha=overlapping2)
+
+axs[1].plot(edopt_6dof['t'],edopt_6dof_alpha_cleaned, color=color_y, lw=2, alpha=overlapping1, ls=':', label='EDOPT')
+axs[1].plot(edopt_6dof['t'],edopt_6dof_beta_cleaned, color=color_y, lw=2, alpha=overlapping1, ls=':')
+axs[1].plot(edopt_6dof['t'],edopt_6dof_gamma_cleaned,  color=color_y, lw=2, alpha=overlapping1, ls=':')
+
+axs[0].set(xlabel='Time [s]', ylabel='Position [m]')
+axs[1].set(xlabel='Time [s]', ylabel='Rotation [deg]')
+
+axs[0].legend(bbox_to_anchor=(0.16, 1.02, 0, 0.2), loc='lower left', ncol=4)
+
+plt.show()
 
 # fig_summary, axs = plt.subplots(4,3)
 # fig_summary.set_size_inches(18.5, 9.5)
@@ -904,6 +1068,7 @@ edopt_error_trans_z = computeEuclideanDistance(gt_trans_z_new['x'], gt_trans_z_n
 edopt_error_roll = computeEuclideanDistance(gt_roll_new['x'], gt_roll_new['y'], gt_roll_new['z'], edopt_roll_resampled_x, edopt_roll_resampled_y, edopt_roll_resampled_z)
 edopt_error_pitch = computeEuclideanDistance(gt_pitch_new['x'], gt_pitch_new['y'], gt_pitch_new['z'], edopt_pitch_resampled_x, edopt_pitch_resampled_y, edopt_pitch_resampled_z)
 edopt_error_yaw = computeEuclideanDistance(gt_yaw_new['x'], gt_yaw_new['y'], gt_yaw_new['z'], edopt_yaw_resampled_x, edopt_yaw_resampled_y, edopt_yaw_resampled_z)
+edopt_error_6dof = computeEuclideanDistance(gt_6dof['x'], gt_6dof['y'], gt_6dof['z'], edopt_6dof_resampled_x, edopt_6dof_resampled_y, edopt_6dof_resampled_z)
 
 edopt_q_angle_trans_x = computeQuaternionError(edopt_trans_x_resampled_qx, edopt_trans_x_resampled_qy, edopt_trans_x_resampled_qz, edopt_trans_x_resampled_qw, gt_trans_x_new['qx'], gt_trans_x_new['qy'], gt_trans_x_new['qz'], gt_trans_x_new['qw'])
 edopt_q_angle_trans_y = computeQuaternionError(edopt_trans_y_resampled_qx, edopt_trans_y_resampled_qy, edopt_trans_y_resampled_qz, edopt_trans_y_resampled_qw, gt_trans_y_new['qx'], gt_trans_y_new['qy'], gt_trans_y_new['qz'], gt_trans_y_new['qw'])
@@ -911,6 +1076,7 @@ edopt_q_angle_trans_z = computeQuaternionError(edopt_trans_z_resampled_qx, edopt
 edopt_q_angle_roll = computeQuaternionError(edopt_roll_resampled_qx, edopt_roll_resampled_qy, edopt_roll_resampled_qz, edopt_roll_resampled_qw, gt_roll_new['qx'], gt_roll_new['qy'], gt_roll_new['qz'], gt_roll_new['qw'])
 edopt_q_angle_pitch = computeQuaternionError(edopt_pitch_resampled_qx, edopt_pitch_resampled_qy, edopt_pitch_resampled_qz, edopt_pitch_resampled_qw, gt_pitch_new['qx'], gt_pitch_new['qy'], gt_pitch_new['qz'], gt_pitch_new['qw'])
 edopt_q_angle_yaw = computeQuaternionError(edopt_yaw_resampled_qx, edopt_yaw_resampled_qy, edopt_yaw_resampled_qz, edopt_yaw_resampled_qw, gt_yaw_new['qx'], gt_yaw_new['qy'], gt_yaw_new['qz'], gt_yaw_new['qw'])
+edopt_q_angle_6dof = computeQuaternionError(edopt_6dof_resampled_qx, edopt_6dof_resampled_qy, edopt_6dof_resampled_qz, edopt_6dof_resampled_qw, gt_6dof['qx'], gt_6dof['qy'], gt_6dof['qz'], gt_6dof['qw'])
 
 rgbde_error_trans_x = computeEuclideanDistance(gt_trans_x_old['x'], gt_trans_x_old['y'], gt_trans_x_old['z'], rgbde_trans_x_resampled_x, rgbde_trans_x_resampled_y, rgbde_trans_x_resampled_z)
 rgbde_error_trans_y = computeEuclideanDistance(gt_trans_y_old['x'], gt_trans_y_old['y'], gt_trans_y_old['z'], rgbde_trans_y_resampled_x, rgbde_trans_y_resampled_y, rgbde_trans_y_resampled_z)
@@ -918,6 +1084,7 @@ rgbde_error_trans_z = computeEuclideanDistance(gt_trans_z_old['x'], gt_trans_z_o
 rgbde_error_roll = computeEuclideanDistance(gt_roll_old['x'], gt_roll_old['y'], gt_roll_old['z'], rgbde_roll_resampled_x, rgbde_roll_resampled_y, rgbde_roll_resampled_z)
 rgbde_error_pitch = computeEuclideanDistance(gt_pitch_old['x'], gt_pitch_old['y'], gt_pitch_old['z'], rgbde_pitch_resampled_x, rgbde_pitch_resampled_y, rgbde_pitch_resampled_z)
 rgbde_error_yaw = computeEuclideanDistance(gt_yaw_old['x'], gt_yaw_old['y'], gt_yaw_old['z'], rgbde_yaw_resampled_x, rgbde_yaw_resampled_y, rgbde_yaw_resampled_z)
+rgbde_error_6dof = computeEuclideanDistance(gt_6dof['x'], gt_6dof['y'], gt_6dof['z'], rgbde_6dof_resampled_x, rgbde_6dof_resampled_y, rgbde_6dof_resampled_z)
 
 rgbde_q_angle_trans_x = computeQuaternionError(rgbde_trans_x_resampled_qx, rgbde_trans_x_resampled_qy, rgbde_trans_x_resampled_qz, rgbde_trans_x_resampled_qw, gt_trans_x_old['qx'], gt_trans_x_old['qy'], gt_trans_x_old['qz'], gt_trans_x_old['qw'])
 rgbde_q_angle_trans_y = computeQuaternionError(rgbde_trans_y_resampled_qx, rgbde_trans_y_resampled_qy, rgbde_trans_y_resampled_qz, rgbde_trans_y_resampled_qw, gt_trans_y_old['qx'], gt_trans_y_old['qy'], gt_trans_y_old['qz'], gt_trans_y_old['qw'])
@@ -925,6 +1092,7 @@ rgbde_q_angle_trans_z = computeQuaternionError(rgbde_trans_z_resampled_qx, rgbde
 rgbde_q_angle_roll = computeQuaternionError(rgbde_roll_resampled_qx, rgbde_roll_resampled_qy, rgbde_roll_resampled_qz, rgbde_roll_resampled_qw, gt_roll_old['qx'], gt_roll_old['qy'], gt_roll_old['qz'], gt_roll_old['qw'])
 rgbde_q_angle_pitch = computeQuaternionError(rgbde_pitch_resampled_qx, rgbde_pitch_resampled_qy, rgbde_pitch_resampled_qz, rgbde_pitch_resampled_qw, gt_pitch_old['qx'], gt_pitch_old['qy'], gt_pitch_old['qz'], gt_pitch_old['qw'])
 rgbde_q_angle_yaw = computeQuaternionError(rgbde_yaw_resampled_qx, rgbde_yaw_resampled_qy, rgbde_yaw_resampled_qz, rgbde_yaw_resampled_qw, gt_yaw_old['qx'], gt_yaw_old['qy'], gt_yaw_old['qz'], gt_yaw_old['qw'])
+rgbde_q_angle_6dof = computeQuaternionError(rgbde_6dof_resampled_qx, rgbde_6dof_resampled_qy, rgbde_6dof_resampled_qz, rgbde_6dof_resampled_qw, gt_6dof['qx'], gt_6dof['qy'], gt_6dof['qz'], gt_6dof['qw'])
 
 edopt_tr_datasets_position_errors = np.concatenate((edopt_error_trans_x, edopt_error_trans_y, edopt_error_trans_z))
 edopt_rot_datasets_position_errors = np.concatenate((edopt_error_roll, edopt_error_pitch, edopt_error_yaw))
@@ -1027,14 +1195,29 @@ rgbde_rot_datasets_angle_errors = np.concatenate((rgbde_q_angle_roll, rgbde_q_an
 
 rad_to_deg = 180/math.pi
 
-labels = [' ', '\nD6', ' ', '\nD5', ' ', '\nD4',' ', '\nD3',' ', '\nD2',' ', '\nD1']
-ticks=[0,1,2,3,4,5,6,7,8,9,10,11]
+labels = [' ', '\n6-DoF',' ', '\n$\\gamma$', ' ', '\n$\\beta$', ' ', '\n$\\alpha$',' ', '\n$z$',' ', '\n$y$',' ', '\n$x$']
+ticks=[0,1,2,3,4,5,6,7,8,9,10,11,12,13]
 medianprops = dict(color='white')
 
-quart_vec_pos=[edopt_error_yaw, rgbde_error_yaw, edopt_error_pitch, rgbde_error_pitch, edopt_error_roll, rgbde_error_roll, edopt_error_trans_z, rgbde_error_trans_z, edopt_error_trans_y, rgbde_error_trans_y, edopt_error_trans_x, rgbde_error_trans_x]
-quart_vec_ang=[edopt_q_angle_yaw*rad_to_deg, rgbde_q_angle_yaw*rad_to_deg, edopt_q_angle_pitch*rad_to_deg, rgbde_q_angle_pitch*rad_to_deg, edopt_q_angle_roll*rad_to_deg, rgbde_q_angle_roll*rad_to_deg, edopt_q_angle_trans_z*rad_to_deg, rgbde_q_angle_trans_z*rad_to_deg, edopt_q_angle_trans_y*rad_to_deg, rgbde_q_angle_trans_y*rad_to_deg, edopt_q_angle_trans_x*rad_to_deg, rgbde_q_angle_trans_x*rad_to_deg]
+quart_vec_pos=[edopt_error_6dof, rgbde_error_6dof, edopt_error_roll, rgbde_error_roll, edopt_error_yaw, rgbde_error_yaw, edopt_error_pitch, rgbde_error_pitch, edopt_error_trans_z, rgbde_error_trans_z, edopt_error_trans_y, rgbde_error_trans_y, edopt_error_trans_x, rgbde_error_trans_x]
+quart_vec_ang=[edopt_q_angle_6dof*rad_to_deg, rgbde_q_angle_6dof*rad_to_deg, edopt_q_angle_roll*rad_to_deg, rgbde_q_angle_roll*rad_to_deg, edopt_q_angle_yaw*rad_to_deg, rgbde_q_angle_yaw*rad_to_deg, edopt_q_angle_pitch*rad_to_deg, rgbde_q_angle_pitch*rad_to_deg, edopt_q_angle_trans_z*rad_to_deg, rgbde_q_angle_trans_z*rad_to_deg, edopt_q_angle_trans_y*rad_to_deg, rgbde_q_angle_trans_y*rad_to_deg, edopt_q_angle_trans_x*rad_to_deg, rgbde_q_angle_trans_x*rad_to_deg]
 
 # new_quart_array = np.array(quart_vec_pos).transpose
+
+edopt_concatenation_pos_errors = np.concatenate((edopt_error_trans_x, edopt_error_trans_y, edopt_error_trans_z, edopt_error_roll,edopt_error_pitch, edopt_error_yaw))
+rgbde_concatenation_pos_errors = np.concatenate((rgbde_error_trans_x, rgbde_error_trans_y, rgbde_error_trans_z, rgbde_error_roll,rgbde_error_pitch, rgbde_error_yaw))
+
+edopt_mean_pos_error = np.mean(edopt_concatenation_pos_errors)
+rgbde_mean_pos_error = np.mean(rgbde_concatenation_pos_errors)
+
+edopt_concatenation_rot_errors = np.concatenate((edopt_q_angle_trans_x*rad_to_deg, edopt_q_angle_trans_y*rad_to_deg, edopt_q_angle_trans_z*rad_to_deg, edopt_q_angle_roll*rad_to_deg,edopt_q_angle_pitch*rad_to_deg, edopt_q_angle_yaw*rad_to_deg))
+rgbde_concatenation_rot_errors = np.concatenate((rgbde_q_angle_trans_x*rad_to_deg, rgbde_q_angle_trans_y*rad_to_deg, rgbde_q_angle_trans_z*rad_to_deg, rgbde_q_angle_roll*rad_to_deg,rgbde_q_angle_pitch*rad_to_deg, rgbde_q_angle_yaw*rad_to_deg))
+
+edopt_mean_rot_error = np.mean(edopt_concatenation_rot_errors)
+rgbde_mean_rot_error = np.mean(rgbde_concatenation_rot_errors)
+
+print("edopt pos error ="+str(edopt_mean_pos_error), ", rot error=", str(edopt_mean_rot_error))
+print("rgbde pos error ="+str(rgbde_mean_pos_error), ", rot error=", str(rgbde_mean_rot_error))
 
 fig15, ax1 = plt.subplots(1,2)
 fig15.set_size_inches(8, 6)
@@ -1049,10 +1232,10 @@ for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
     plt.setp(res2[element], color='k')
 ax1[1].set_yticklabels([])
 ax1[1].set_yticks([])
-ax1[0].set_xlim(-0.001,  0.025)
+ax1[0].set_xlim(-0.001,  0.028)
 ax1[1].set_xlim(-0.5,  6.5)
 ax1[1].xaxis.set_major_locator(plt.MaxNLocator(4))
-colors=[color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde]
+colors=[color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde, color_edopt, color_rgbde]
 # color='white'
 # colors = [color, color, color, color, color, color,color, color,color, color,color, color]
 # patterns=[0,1,0,1,0,1,0,1,0,1,0,1]
