@@ -41,6 +41,7 @@ private:
     //handlers
     //EROSdirect eros_handler;
     EROSfromYARP eros_handler;
+    cv::Mat surface;
     //ARESfromYARP eros_handler;
     imageProcessing img_handler;
     warpManager warp_handler;
@@ -64,6 +65,7 @@ private:
     std::string file_name;
     std::deque< std::array<double, 8> > data_to_save;
     cv::VideoWriter vid_writer;
+    cv::VideoCapture webcam;
 
 public:
 
@@ -78,7 +80,7 @@ public:
         canny_scale = rf.check("canny_scale", Value(3)).asFloat64();
         eros_k = rf.check("eros_k", Value(7)).asInt32();
         eros_d = rf.check("eros_d", Value(0.7)).asFloat64();
-        period = rf.check("period", Value(0.1)).asFloat64();
+        period = rf.check("period", Value(0.0416667)).asFloat64();
         dp2 = rf.check("dp2") && rf.check("dp2", Value(true)).asBool(); //default false
         //run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
         run = rf.check("run", Value(false)).asBool();
@@ -125,9 +127,15 @@ public:
 
         proj_rgb = cv::Mat::zeros(img_size, CV_8UC1);
         proj_32f = cv::Mat::zeros(img_size, CV_32F);
+        surface = cv::Mat::zeros(img_size, CV_8U);
+
+        webcam.open(0, cv::CAP_ANY);
 
         cv::namedWindow("EROS", cv::WINDOW_NORMAL);
-        cv::resizeWindow("EROS", img_size);
+        if(webcam.isOpened())
+            cv::resizeWindow("EROS", {img_size.width*2, img_size.height});
+        else
+            cv::resizeWindow("EROS", img_size);
         cv::moveWindow("EROS", 1920, 100);
 
         // cv::namedWindow("Translations", cv::WINDOW_AUTOSIZE);
@@ -147,6 +155,8 @@ public:
         } else {
             worker = std::thread([this]{sequential_loop();});
         }
+
+        
         
         if (rf.check("file")) {
             std::string filename = rf.find("file").asString();
@@ -155,7 +165,7 @@ public:
                 yError() << "Could not open output file" << filename;
                 return false;
             }
-            vid_writer.open(filename + ".mp4", cv::VideoWriter::fourcc('H','2','6','4'), (int)(1.0/period), img_size, true);
+            vid_writer.open(filename + ".mp4", cv::VideoWriter::fourcc('H','2','6','4'), (int)(1.0/period), {img_size.width*2, img_size.height}, true);
             if (!vid_writer.isOpened()) {
                 yError() << "Could not open output file" << filename << ".mp4";
                 return false;
@@ -185,17 +195,19 @@ public:
 
     bool updateModule() override
     {
+        static int low_rate_hertz = 0;
         static cv::Mat vis, proj_vis, eros_vis;
         //vis = warp_handler.make_visualisation(eros_u);
         //proj_rgb.copyTo(proj_vis); 
         //img_handler.process_eros(eros_handler.eros.getSurface(), eros_vis);
-        cv::medianBlur(eros_handler.eros.getSurface(), eros_vis, 3);
-        cv::GaussianBlur(eros_vis, eros_vis, cv::Size(3, 3), 0);
-        cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
+        //cv::Mat eros8; eros_handler.eros.getSurface().convertTo(eros8, CV_8U, 255);
+        //cv::medianBlur(eros8, eros_vis, 3);
+        //cv::GaussianBlur(eros_vis, eros_vis, cv::Size(3, 3), 0);
+        cv::cvtColor(surface, eros_vis, cv::COLOR_GRAY2BGR);
         cv::resize(eros_vis, eros_vis, img_size);
         cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
         if(vis_type == 0)
-            vis = proj_vis + eros_handler.eros.getSurface();
+            vis = proj_vis + eros_vis;
         else
             vis = proj_vis + eros_handler.event_image;
         eros_handler.event_image.setTo(0);
@@ -210,11 +222,20 @@ public:
         std::stringstream ss; 
         ss.str();
         if(toc_count)
-            ss << (int)toc_count / (period*10) << "Hz";
+            ss << low_rate_hertz << "Hz";
         
         cv::putText(vis, ss.str(), cv::Point(640-160, 480-10), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(200, 200, 200));
 
-        cv::imshow("EROS", vis);
+        static cv::Mat vis2;
+        if(webcam.isOpened()) {
+            vis2 = cv::Mat(vis.rows, vis.cols*2, CV_8UC3);
+            vis.copyTo(vis2({640, 0, 640, 480}));
+            webcam.read(vis2({0, 0, 640, 480}));
+            cv::imshow("EROS", vis2);
+        } else {
+            vis2 = cv::Mat(vis.size(), CV_8UC3);
+        }
+        cv::imshow("EROS", vis2);
         //cv::imshow("Translations", warps_t+0.5);
         //cv::imshow("Rotations", warps_r+0.5);
         static bool stop_running = false;
@@ -249,15 +270,16 @@ public:
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
         if(vid_writer.isOpened() && eros_handler.tic > 0)
-            vid_writer << vis;
+            vid_writer << vis2;
         static int updated_divisor=0;
         if (updated_divisor++ % 10 == 0) {
+            low_rate_hertz = (int)toc_count / (period*10);
             if (toc_count) {
                 yInfo() << (int)(toc_eros / toc_count) << "\t"
                         << (int)(toc_proj / toc_count) << "\t"
                         << (int)(toc_projproc / toc_count) << "\t"
                         << (int)(toc_warp / toc_count) << "\t"
-                        << (int)toc_count / (period*10) << "Hz";
+                        << low_rate_hertz << "Hz";
                 toc_count = toc_warp = toc_projproc = toc_proj = toc_eros = 0;
             }
             if (warp_count || proj_count) {
@@ -389,7 +411,8 @@ public:
             //get the EROS
             dataset_time = eros_handler.tic;
             static cv::Mat scaled_eros = cv::Mat::zeros(img_size, CV_8U);
-            cv::resize(eros_handler.eros.getSurface(), scaled_eros, scaled_eros.size());
+            eros_handler.eros.getSurface().convertTo(surface, CV_8U, 255);
+            cv::resize(surface, scaled_eros, scaled_eros.size());
             img_handler.setProcObs(scaled_eros);
             //warp_handler.proc_obs = img_handler.proc_obs;
             img_handler.proc_obs.copyTo(warp_handler.proc_obs);

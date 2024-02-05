@@ -80,7 +80,7 @@ class EROSfromYARP
 public:
 
     ev::window<ev::AE> input_port;
-    ev::EROS eros;
+    ev::SCARF eros;
     std::thread eros_worker;
     double tic{-1};
     cv::Mat event_image;
@@ -91,11 +91,11 @@ public:
             ev::info my_info = input_port.readAll(true);
             tic = my_info.timestamp;
             for(auto &v : input_port) {
-                eros.update(v.x, v.y);
-                if(v.p)
-                    event_image.at<cv::Vec3b>(v.y, v.x) = cv::Vec3b(255, 255, 255);
-                else 
-                    event_image.at<cv::Vec3b>(v.y, v.x) = cv::Vec3b(255, 0, 0);
+                eros.update(v.x, v.y, v.p);
+                // if(v.p)
+                //     event_image.at<cv::Vec3b>(v.y, v.x) = cv::Vec3b(255, 255, 255);
+                // else 
+                //     event_image.at<cv::Vec3b>(v.y, v.x) = cv::Vec3b(255, 0, 0);
                 
             }
         }
@@ -104,7 +104,8 @@ public:
 public:
     bool start(cv::Size resolution, std::string sourcename, std::string portname, int k = 5, double d = 0.3)
     {
-        eros.init(resolution.width, resolution.height, k, d);
+        eros.initialise(resolution, 14);
+        //eros.init(resolution.width, resolution.height, k, d);
         event_image = cv::Mat(resolution, CV_8UC3, cv::Vec3b(0, 0, 0));
 
         if (!input_port.open(portname))
