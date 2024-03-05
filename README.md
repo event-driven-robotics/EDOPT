@@ -1,6 +1,4 @@
-# object-track-6dof
-Return of the Six (DoF Tracking of Objects)
-
+# EDOPT: Event-camera 6-DoF Dynamic Object Pose Tracking
 
 Assumes a known object model
 
