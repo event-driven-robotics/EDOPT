@@ -39,7 +39,7 @@ RUN apt install -y \
     gdb
 
 # YCM
-ARG YCM_VERSION=v0.14.0
+ARG YCM_VERSION=v0.15.2
 RUN cd $CODE_DIR && \
     git clone --depth 1 --branch $YCM_VERSION https://github.com/robotology/ycm.git && \
     cd ycm && \
@@ -49,7 +49,7 @@ RUN cd $CODE_DIR && \
 
 
 # YARP
-ARG YARP_VERSION=v3.4.0
+ARG YARP_VERSION=v3.8.0
 RUN cd $CODE_DIR && \
     git clone --depth 1 --branch $YARP_VERSION https://github.com/robotology/yarp.git &&\
     cd yarp &&\
@@ -71,7 +71,7 @@ RUN cd $CODE_DIR &&\
 
 # event-driven
 
-ARG ED_VERSION=ev2-dev
+ARG ED_VERSION=master
 RUN cd $CODE_DIR &&\
     git clone --depth 1 --branch $ED_VERSION https://github.com/robotology/event-driven.git &&\
     cd event-driven &&\
@@ -105,4 +105,4 @@ RUN echo "$ssh_prv_key" > /root/.ssh/id_ed25519 && \
     chmod 600 /root/.ssh/id_ed25519.pub
 
 RUN cd $CODE_DIR &&\
-    git clone git@github.com:arrenglover/object-track-6dof.git
+    git clone git@github.com:event-driven-robotics/EDOPT.git
