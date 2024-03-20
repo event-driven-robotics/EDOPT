@@ -1,5 +1,7 @@
 # EDOPT: Event-camera 6-DoF Dynamic Object Pose Tracking
 
+Datasets: https://zenodo.org/records/10829647
+
 Assumes a known object model
 
 Three simultaneous computations:
@@ -12,7 +14,7 @@ Build the docker using:
 
 ```
 cd object-track-6dof
-docker build -t sixdof:latest --ssh default --build-arg ssh_pub_key="$(cat ~/.ssh/id_rsa.pub)" --build-arg ssh_prv_key="$(cat ~/.ssh/id_rsa)" - < Dockerfile
+docker build -t sixdof:latest - < Dockerfile
 ```
 Make the container using:
 
