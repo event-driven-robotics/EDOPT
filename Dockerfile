@@ -60,15 +60,6 @@ RUN cd $CODE_DIR && \
 EXPOSE 10000/tcp 10000/udp
 RUN yarp check
 
-# SUPERIMPOSEMESH
-ARG SIML_VERSION=devel
-RUN cd $CODE_DIR &&\
-    git clone --depth 1 --branch $SIML_VERSION https://github.com/robotology/superimpose-mesh-lib.git &&\
-    cd superimpose-mesh-lib &&\
-    mkdir build && cd build &&\
-    cmake .. &&\
-    make -j `nproc` install
-
 # event-driven
 
 ARG ED_VERSION=master
@@ -105,4 +96,22 @@ RUN echo "$ssh_prv_key" > /root/.ssh/id_ed25519 && \
     chmod 600 /root/.ssh/id_ed25519.pub
 
 RUN cd $CODE_DIR &&\
-    git clone git@github.com:event-driven-robotics/EDOPT.git
+    git clone git@github.com:event-driven-robotics/EDOPT.git &&\
+    mv EDOPT object-track-6dof
+
+# SUPERIMPOSEMESH
+ARG SIML_VERSION=devel
+RUN cd $CODE_DIR &&\
+    git clone --depth 1 --branch $SIML_VERSION https://github.com/robotology/superimpose-mesh-lib.git &&\
+    cd superimpose-mesh-lib &&\
+    git apply $CODE_DIR/object-track-6dof/superimposeroi.patch &&\
+    mkdir build && cd build &&\
+    cmake .. &&\
+    make -j `nproc` install
+
+# Build object-track-6dof
+RUN cd $CODE_DIR &&\
+    cd object-track-6dof/code &&\
+    mkdir build && cd build &&\
+    cmake .. &&\
+    make -j `nproc`
