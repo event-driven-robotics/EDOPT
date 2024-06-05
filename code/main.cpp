@@ -195,7 +195,7 @@ public:
         cv::resize(eros_vis, eros_vis, img_size);
         cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
         if(vis_type == 0)
-            vis = proj_vis + eros_handler.eros.getSurface();
+            vis = proj_vis + eros_vis;
         else
             vis = proj_vis + eros_handler.event_image;
         eros_handler.event_image.setTo(0);
