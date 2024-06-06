@@ -14,7 +14,7 @@ Build the docker using:
 
 ```
 cd EDOPT
-docker build -t sixdof:latest --ssh default --build-arg ssh_pub_key="$(cat ~/.ssh/id_rsa.pub)" --build-arg ssh_prv_key="$(cat ~/.ssh/id_rsa)" - < Dockerfile
+docker build -t sixdof:latest --ssh default .
 ```
 Make and enter the container using:
 
