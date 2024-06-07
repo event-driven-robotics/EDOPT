@@ -649,7 +649,7 @@ int main(int argc, char* argv[])
 {
     tracker my_tracker;
     ResourceFinder rf;
-    rf.setDefaultConfigFile("/usr/local/src/object-track-6dof/configCAR.ini");
+    rf.setDefaultConfigFile("/usr/local/src/EDOPT/configCAR.ini");
     rf.configure(argc, argv);
     
     return my_tracker.runModule(rf);

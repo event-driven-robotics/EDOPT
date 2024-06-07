@@ -87,22 +87,21 @@ RUN mkdir -p /root/.ssh && \
 RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
 RUN --mount=type=ssh cd $CODE_DIR &&\
-    git clone git@github.com:event-driven-robotics/EDOPT.git &&\
-    mv EDOPT object-track-6dof
+    git clone git@github.com:event-driven-robotics/EDOPT.git
 
 # SUPERIMPOSEMESH
 ARG SIML_VERSION=devel
 RUN cd $CODE_DIR &&\
     git clone --depth 1 --branch $SIML_VERSION https://github.com/robotology/superimpose-mesh-lib.git &&\
     cd superimpose-mesh-lib &&\
-    git apply $CODE_DIR/object-track-6dof/superimposeroi.patch &&\
+    git apply $CODE_DIR/EDOPT/superimposeroi.patch &&\
     mkdir build && cd build &&\
     cmake .. &&\
     make -j `nproc` install
 
 # Build object-track-6dof
 RUN cd $CODE_DIR &&\
-    cd object-track-6dof/code &&\
+    cd EDOPT/code &&\
     mkdir build && cd build &&\
     cmake .. &&\
     make -j `nproc`

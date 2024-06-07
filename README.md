@@ -14,6 +14,8 @@ Build the docker using:
 
 ```
 cd EDOPT
+eval $(ssh-agent -s)
+ssh-add path/to/your/ssh/secret/key
 docker build -t sixdof:latest --ssh default .
 ```
 Make and enter the container using:
