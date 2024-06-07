@@ -86,8 +86,11 @@ RUN mkdir -p /root/.ssh && \
     chmod 0700 /root/.ssh
 RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
+ARG GIT_BRANCH=main
 RUN --mount=type=ssh cd $CODE_DIR &&\
-    git clone git@github.com:event-driven-robotics/EDOPT.git
+    git clone git@github.com:event-driven-robotics/EDOPT.git &&\
+    cd EDOPT &&\
+    git checkout $GIT_BRANCH
 
 # SUPERIMPOSEMESH
 ARG SIML_VERSION=devel
@@ -99,7 +102,7 @@ RUN cd $CODE_DIR &&\
     cmake .. &&\
     make -j `nproc` install
 
-# Build object-track-6dof
+# Build EDOPT
 RUN cd $CODE_DIR &&\
     cd EDOPT/code &&\
     mkdir build && cd build &&\
