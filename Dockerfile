@@ -60,15 +60,6 @@ RUN cd $CODE_DIR && \
 EXPOSE 10000/tcp 10000/udp
 RUN yarp check
 
-# SUPERIMPOSEMESH
-ARG SIML_VERSION=devel
-RUN cd $CODE_DIR &&\
-    git clone --depth 1 --branch $SIML_VERSION https://github.com/robotology/superimpose-mesh-lib.git &&\
-    cd superimpose-mesh-lib &&\
-    mkdir build && cd build &&\
-    cmake .. &&\
-    make -j `nproc` install
-
 # event-driven
 
 ARG ED_VERSION=master
@@ -85,9 +76,6 @@ RUN cd $CODE_DIR &&\
 # set github ssh keys #
 #######################
 
-ARG ssh_prv_key
-ARG ssh_pub_key
-
 RUN apt install -y \
     openssh-client git \
     libmysqlclient-dev \
@@ -98,11 +86,25 @@ RUN mkdir -p /root/.ssh && \
     chmod 0700 /root/.ssh
 RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
-# Add the keys and set permissions
-RUN echo "$ssh_prv_key" > /root/.ssh/id_ed25519 && \
-    echo "$ssh_pub_key" > /root/.ssh/id_ed25519.pub && \
-    chmod 600 /root/.ssh/id_ed25519 && \
-    chmod 600 /root/.ssh/id_ed25519.pub
+ARG GIT_BRANCH=main
+RUN --mount=type=ssh cd $CODE_DIR &&\
+    git clone git@github.com:event-driven-robotics/EDOPT.git &&\
+    cd EDOPT &&\
+    git checkout $GIT_BRANCH
 
+# SUPERIMPOSEMESH
+ARG SIML_VERSION=devel
 RUN cd $CODE_DIR &&\
-    git clone git@github.com:event-driven-robotics/EDOPT.git
+    git clone --depth 1 --branch $SIML_VERSION https://github.com/robotology/superimpose-mesh-lib.git &&\
+    cd superimpose-mesh-lib &&\
+    git apply $CODE_DIR/EDOPT/superimposeroi.patch &&\
+    mkdir build && cd build &&\
+    cmake .. &&\
+    make -j `nproc` install
+
+# Build EDOPT
+RUN cd $CODE_DIR &&\
+    cd EDOPT/code &&\
+    mkdir build && cd build &&\
+    cmake .. &&\
+    make -j `nproc`
