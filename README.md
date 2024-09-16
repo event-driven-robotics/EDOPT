@@ -1,6 +1,19 @@
 # EDOPT: Event-camera 6-DoF Dynamic Object Pose Tracking
 
+Paper: https://ieeexplore.ieee.org/abstract/document/10611511
+
 Datasets: https://zenodo.org/records/10829647
+
+```
+@inproceedings{glover2024edopt,
+  title={EDOPT: Event-camera 6-DoF Dynamic Object Pose Tracking},
+  author={Glover, Arren and Gava, Luna and Li, Zhichao and Bartolozzi, Chiara},
+  booktitle={2024 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages={18200--18206},
+  year={2024},
+  organization={IEEE}
+}
+```
 
 Assumes a known object model
 
