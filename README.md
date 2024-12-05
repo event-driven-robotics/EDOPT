@@ -27,26 +27,32 @@ Three simultaneous computations:
 
 ```
 cd EDOPT
-eval $(ssh-agent -s)
-ssh-add path/to/your/ssh/secret/key
-docker build -t sixdof:latest --ssh default .
+docker build -t edopt:latest .
 
 ## if you want to build another remote branch for debugging ...
-docker build -t sixdof:latest --build-arg GIT_BRANCH=your/specified/remote/branch --ssh default  .
+docker build -t edopt:latest --build-arg GIT_BRANCH=your/specified/remote/branch .
 ```
 ### Make and enter the container using:
 
 ```
-docker run -it --privileged -v /dev/bus/usb:/dev/bus/usb -v /tmp/.X11-unix/:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY --network host --gpus all --name sixdofdev sixdof:latest
+docker run -it --privileged -v /dev/bus/usb:/dev/bus/usb -v /tmp/.X11-unix/:/tmp/.X11-unix -e DISPLAY=unix$DISPLAY --network host --gpus all --name edopt edopt:latest
 ```
 or
 ```
 docker compose up -d
-docker exec -it edopt-sixdofdev-1 /bin/bash
+docker exec -it edopt /bin/bash
+```
+### How to build EDOPT
+Terminal 1 (on docker container)
+```
+mkdir -p /usr/local/src/EDOPT/code/build
+cd /usr/local/src/EDOPT/code/build
+cmake ..
+make
 ```
 
 ### How to run EDOPT
-Terminal 1 (on host)
+Terminal 1 (on docker container)
 ```
 yarpserver
 ```

@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # produce the cmake var PROJECT_NAME
-project(sixdofobject)
+project(edopt)
 
 if(NOT CMAKE_BUILD_TYPE)
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY VALUE "Release")
@@ -24,10 +24,10 @@ find_package(event-driven REQUIRED)
 #                          INSTALL_NAME_DIR "${CMAKE_INSTALL_FULL_LIBDIR}"
 #                          USE_LINK_PATH)
 
-add_executable(sixdofobject main.cpp image_processing.h projection.h erosdirect.h comparison.h)
-target_compile_features(sixdofobject PRIVATE cxx_std_17)
+add_executable(${PROJECT_NAME} main.cpp image_processing.h projection.h erosdirect.h comparison.h)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 #target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
-target_link_libraries(sixdofobject PRIVATE  YARP_init
+target_link_libraries(${PROJECT_NAME} PRIVATE  YARP_init
                                             YARP_os
                                             event-driven
                                             ${OpenCV_LIBS}
@@ -35,5 +35,5 @@ target_link_libraries(sixdofobject PRIVATE  YARP_init
                                             MetavisionSDK::driver
                                             SI::SuperimposeMesh)
 
-install(TARGETS sixdofobject DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 

@@ -87,8 +87,8 @@ RUN mkdir -p /root/.ssh && \
 RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
 ARG GIT_BRANCH=main
-RUN --mount=type=ssh cd $CODE_DIR &&\
-    git clone git@github.com:event-driven-robotics/EDOPT.git &&\
+RUN cd $CODE_DIR &&\
+    git clone https://github.com/event-driven-robotics/EDOPT.git &&\
     cd EDOPT &&\
     git checkout $GIT_BRANCH
 
