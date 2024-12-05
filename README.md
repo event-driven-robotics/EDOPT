@@ -70,5 +70,5 @@ atis-bridge-sdk --s 50
 Terminal 3 (on docker container)
 ```
 cd /usr/local/src/EDOPT/code/build
-./sixdofdev
+./edopt
 ```
