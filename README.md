@@ -80,7 +80,7 @@ Terminal 1 (on docker container)
 ```
 gh auth login
 ```
-- Then, select as shown below
+- Then, select as follows
   - ? Where do you use GitHub? > GitHub.com
   - ? What is your preferred protocol for Git operations on this host? > HTTPS
   - ? How would you like to authenticate GitHub CLI? > Login with a web browser
