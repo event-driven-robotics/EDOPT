@@ -72,3 +72,18 @@ Terminal 3 (on docker container)
 cd /usr/local/src/EDOPT/code/build
 ./edopt
 ```
+
+### For development from docker container
+Solution for Git Authentication
+
+Terminal 1 (on docker container)
+```
+gh auth login
+```
+- Then, select as shown below
+  - ? Where do you use GitHub? > GitHub.com
+  - ? What is your preferred protocol for Git operations on this host? > HTTPS
+  - ? How would you like to authenticate GitHub CLI? > Login with a web browser
+  - ! First copy your one-time code: XXXX-XXX
+  - Open this link [https://github.com/login/device](https://github.com/login/device)
+  - In the web browser, input one-time code to login
