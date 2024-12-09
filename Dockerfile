@@ -22,6 +22,22 @@ RUN apt install -y \
     libglm-dev \
     libeigen3-dev
 
+# Suggested dependencies for YARP
+RUN apt update && apt install -y \
+    qtbase5-dev qtdeclarative5-dev qtmultimedia5-dev \
+    qml-module-qtquick2 qml-module-qtquick-window2 \
+    qml-module-qtmultimedia qml-module-qtquick-dialogs \
+    qml-module-qtquick-controls qml-module-qt-labs-folderlistmodel \
+    qml-module-qt-labs-settings \
+    libqcustomplot-dev \
+    libgraphviz-dev \
+    libjpeg-dev \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-libav
+
 RUN echo "deb [arch=amd64 trusted=yes] https://apt.prophesee.ai/dists/public/b4b3528d/ubuntu focal sdk" >> /etc/apt/sources.list &&\
     apt update
 
@@ -34,9 +50,18 @@ RUN apt install -y \
     metavision-sdk
 
 #my favourites
-RUN apt install -y \
+RUN apt update && apt install -y \
     vim \
     gdb
+
+# Github CLI
+RUN (type -p wget >/dev/null || (apt update && apt-get install wget -y)) \
+    && mkdir -p -m 755 /etc/apt/keyrings \
+    && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt update \
+    && apt install gh -y
 
 # YCM
 ARG YCM_VERSION=v0.15.2
@@ -60,9 +85,9 @@ RUN cd $CODE_DIR && \
 EXPOSE 10000/tcp 10000/udp
 RUN yarp check
 
-# event-driven
 
-ARG ED_VERSION=master
+# event-driven
+ARG ED_VERSION=main
 RUN cd $CODE_DIR &&\
     git clone --depth 1 --branch $ED_VERSION https://github.com/robotology/event-driven.git &&\
     cd event-driven &&\
@@ -87,8 +112,8 @@ RUN mkdir -p /root/.ssh && \
 RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
 ARG GIT_BRANCH=main
-RUN --mount=type=ssh cd $CODE_DIR &&\
-    git clone git@github.com:event-driven-robotics/EDOPT.git &&\
+RUN cd $CODE_DIR &&\
+    git clone https://github.com/event-driven-robotics/EDOPT.git &&\
     cd EDOPT &&\
     git checkout $GIT_BRANCH
 

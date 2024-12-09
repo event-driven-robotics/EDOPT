@@ -1,7 +1,7 @@
-version: '3'
 services:
-  sixdofdev:
-    image: sixdof:latest
+  edopt:
+    image: edopt:latest
+    container_name: edopt
     privileged: true
     volumes:
       - /dev/bus/usb:/dev/bus/usb
