@@ -147,10 +147,10 @@ public:
     {
         //eros(roi) is processed as full image size and then resized
         //otherwise it has too many artefacts
-        static cv::Mat roi_32f;// = cv::Mat::zeros(proc_size, CV_32F);
+        // static cv::Mat roi_32f;// = cv::Mat::zeros(proc_size, CV_32F);
         proc_obs = 0;
-        process_eros(image(o_img_roi), roi_32f);
-        cv::resize(roi_32f, proc_obs(o_proc_roi), o_proc_roi.size(), 0, 0, cv::INTER_CUBIC);
+        // process_eros(image(o_img_roi), roi_32f);
+        cv::resize(image(o_img_roi), proc_obs(o_proc_roi), o_proc_roi.size(), 0, 0, cv::INTER_CUBIC);
     }
 
     // cv::Mat make_visualisation(cv::Mat full_obs) {
