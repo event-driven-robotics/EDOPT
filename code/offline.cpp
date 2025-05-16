@@ -24,7 +24,6 @@ private:
     //parameters
     int proc_size{100};
     int canny_thresh{40}; double canny_scale{3.0};
-    int eros_k{7}; double eros_d{0.7};
     bool dp2{false};
     bool parallel_method;
     bool run{true};
@@ -70,7 +69,7 @@ private:
     cv::VideoWriter vid_writer;
 
     std::ofstream outFile;
-    double updateT = 0.001; 
+    double updateT = 0.004; 
 
 public:
     struct DataPoint {
@@ -85,17 +84,17 @@ public:
         double bias_sens = rf.check("s", Value(0.6)).asFloat64();
         double cam_filter = rf.check("f", Value(0.1)).asFloat64();
 
-        datapath = rf.check("data", Value("/data/mustard_bottle_translation_xyz_roll_edopt_test1/leftdvs/data.log")).asString();
+        datapath = rf.check("data", Value("/data/mustard_bottle_translation_xyz_roll_yaw_pitch_edopt_test2/leftdvs/data.log")).asString();
 
         proc_size = rf.check("proc_size", Value(100)).asInt32();
         canny_thresh = rf.check("canny_thresh", Value(40)).asInt32();
         canny_scale = rf.check("canny_scale", Value(3)).asFloat64();
-        block_size = rf.check("block_size", Value(14)).asInt32();
-        alpha = rf.check("alpha", Value(2.0)).asFloat64();
-        c_factor = rf.check("c", Value(0.3)).asFloat64();
-        period = rf.check("period", Value(0.1)).asFloat64();
+        block_size = rf.check("block_size", Value(11)).asInt32();//14
+        alpha = rf.check("alpha", Value(1.0)).asFloat64(); //1.0
+        c_factor = rf.check("c", Value(0.3)).asFloat64(); //0.8
+        period = rf.check("period", Value(0.1)).asFloat64(); 
         dp2 = rf.check("dp2") && rf.check("dp2", Value(true)).asBool(); //default false
-        dp2 = true;
+        dp2 = false;
         //run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
         parallel_method = rf.check("parallel") && rf.check("parallel", Value(true)).asBool(); // defaulat false
         render_scaler = rf.check("render_scaler", Value(1.0)).asFloat64();
@@ -144,11 +143,11 @@ public:
         if(!si_cad)
             return false;
 
-        int blur = proc_size / 20;
+        int blur = proc_size / 8; //8
         double dp = 1;//+rescale_size / 100;
         warp_handler.initialise(proc_size, dp2);
         warp_handler.create_Ms(dp);
-        warp_handler.set_current(state);
+        warp_handler.set_current(state); 
         img_handler.initialise(proc_size, blur, canny_thresh, canny_scale);
 
         proj_rgb = cv::Mat::zeros(img_size, CV_8UC1);
@@ -180,7 +179,7 @@ public:
         // }
 
 
-        outFile.open("/data/object_state_t_"+std::to_string(updateT)+"_dp_"+std::to_string(dp)+".csv");
+        outFile.open("/data/mustard_bottle_translation_xyz_roll_yaw_pitch_edopt_test2/results/object_state_t_"+std::to_string(updateT)+"_dp_"+std::to_string(dp)+".csv");
         if (!outFile.is_open()) {
             yError() << "Could not open output file" << "object_state.csv";
             return false;
@@ -261,11 +260,13 @@ public:
             projectStateYawPitch(warp_handler.state_current);
             // get the ROI of the current state
             img_handler.set_projection_rois(proj_rgb, 20);
+
             // process the projection
             img_handler.setProcProj(proj_rgb);
 
             // set the current image
             img_handler.proc_proj.copyTo(warp_handler.projection.img_warp);
+            
 
             // warp the current projection based on the warp list
             //  and clear the list
@@ -285,10 +286,15 @@ public:
 
             warp_handler.make_predictive_warps();
 
+            img_handler.make_template_Mex(warp_handler.projection.img_warp, warp_handler.projection.img_warp);
+
+            for(auto &w : warp_handler.warps){
+                img_handler.make_template_Mex(w.img_warp, w.img_warp); 
+            }
+
             // get the current EROS
             img_handler.setProcObs(scarf.getSurface());
             warp_handler.proc_obs = img_handler.proc_obs;
-
 
             // perform the comparison
             warp_handler.score_predictive_warps();
@@ -357,16 +363,6 @@ public:
                 cv::Mat img1 = addScoreToImage(warp_handler.warps[idx1].img_warp, warp_handler.warps[idx1].score, proj_name[idx1]);
                 cv::Mat img2 = addScoreToImage(warp_handler.warps[idx2].img_warp, warp_handler.warps[idx2].score, proj_name[idx2]);        
 
-                cv::Mat img1Color;
-                cv::cvtColor(img1, img1Color, cv::COLOR_GRAY2BGR);
-
-                cv::Mat img2Color;
-                cv::cvtColor(img2, img2Color, cv::COLOR_GRAY2BGR);
-
-                cv::Mat mask = proc_obs_8U > 0;  // Create a binary mask where proc_obs_8U > 0
-                img1Color.setTo(cv::Scalar(0, 255, 0), mask);  // Set those pixels to green
-
-                imshow("overlay", img1Color);
                 cv::Mat hstacked;
                 cv::hconcat(img1, img2, hstacked);
 
@@ -375,6 +371,23 @@ public:
                 row_img++; 
             }
             cv::vconcat(rowImages, finalImage);
+            
+            cv::Mat norm1_8u, norm2_8u, norm3_8u;
+            img_handler.proc_obs.convertTo(norm1_8u, CV_8UC1, 255);
+
+            warp_handler.warps[zn].img_warp = (warp_handler.warps[xp].img_warp + 1)*0.5; 
+            warp_handler.warps[zn].img_warp.convertTo(norm2_8u, CV_8UC1, 255);
+
+            warp_handler.projection.img_warp = (warp_handler.projection.img_warp +1)*0.5;
+            warp_handler.projection.img_warp.convertTo(norm3_8u, CV_8UC1, 255);
+            
+            cv::Mat overlay;
+            std::vector<cv::Mat> channels = { norm1_8u, norm2_8u, norm3_8u }; // B, G, R
+            cv::merge(channels, overlay);
+
+            cv::namedWindow("Overlay", cv::WINDOW_NORMAL);
+            cv::resizeWindow("Overlay", 1200, 1000);
+            cv::imshow("Overlay", overlay);    
 
             if (index_max != 12)
                 std::cout<<"Winning axis = "<<proj_name[index_max]<<", score = "<<max_score<<std::endl; 
