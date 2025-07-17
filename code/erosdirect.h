@@ -123,6 +123,47 @@ public:
 
 };
 
+class SCARFfromYARP
+{
+public:
+
+    ev::window<ev::AE> input_port;
+    ev::SCARF scarf;
+    std::thread scarf_worker;
+    double tic{-1};
+
+    void scarfUpdate() 
+    {
+        while (!input_port.isStopping()) {
+            ev::info my_info = input_port.readAll(true);
+            tic = my_info.timestamp;
+            for(auto &v : input_port) {
+                scarf.update(v.x, v.y, v.p);
+            }
+        }
+    }
+
+public:
+    bool start(cv::Size resolution, std::string sourcename, std::string portname, int block_size = 14, double alpha = 1.0, double c_factor = 0.3)
+    {
+        scarf.initialise(resolution, block_size, alpha, c_factor);
+
+        if (!input_port.open(portname))
+            return false;
+        yarp::os::Network::connect(sourcename, portname, "fast_tcp");
+
+        scarf_worker = std::thread([this]{scarfUpdate();});
+        return true;
+    }
+
+    void stop()
+    {
+        input_port.stop();
+        scarf_worker.join();
+    }
+
+};
+
 class ARESfromYARP
 {
 public:

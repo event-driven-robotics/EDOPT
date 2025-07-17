@@ -30,6 +30,8 @@ private:
     bool run{true};
     double period{0.1};
     double render_scaler{1.0};
+    int block_size; 
+    double alpha, c_factor;
 
     //threads and mutex, handlers
     std::thread worker;
@@ -40,10 +42,12 @@ private:
 
     //handlers
     //EROSdirect eros_handler;
-    EROSfromYARP eros_handler;
+    SCARFfromYARP scarf_handler;
     //ARESfromYARP eros_handler;
     imageProcessing img_handler;
     warpManager warp_handler;
+
+    ev::SCARF scarf;
 
     //internal variables
     SICAD* si_cad;
@@ -78,6 +82,9 @@ public:
         canny_scale = rf.check("canny_scale", Value(3)).asFloat64();
         eros_k = rf.check("eros_k", Value(7)).asInt32();
         eros_d = rf.check("eros_d", Value(0.7)).asFloat64();
+        block_size = rf.check("block_size", Value(11)).asInt32();//14
+        alpha = rf.check("alpha", Value(1.0)).asFloat64(); //1.0
+        c_factor = rf.check("c", Value(0.3)).asFloat64(); //0.8
         period = rf.check("period", Value(0.1)).asFloat64();
         dp2 = rf.check("dp2") && rf.check("dp2", Value(true)).asBool(); //default false
         //run = rf.check("run") && !rf.find("run").asBool() ? false : true; //default true
@@ -107,7 +114,7 @@ public:
             return false;
         }
 
-        if (!eros_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:i"), eros_k, eros_d)) {
+        if (!scarf_handler.start(cv::Size(intrinsic_parameters.find("w").asInt32(), intrinsic_parameters.find("h").asInt32()), "/atis3/AE:o", getName("/AE:i"), block_size, alpha, c_factor)) {
             yError() << "could not open the YARP eros handler";
             return false;
         }
@@ -185,20 +192,19 @@ public:
 
     bool updateModule() override
     {
-        static cv::Mat vis, proj_vis, eros_vis;
+        static cv::Mat vis, proj_vis, scarf_vis;
         //vis = warp_handler.make_visualisation(eros_u);
         //proj_rgb.copyTo(proj_vis); 
         //img_handler.process_eros(eros_handler.eros.getSurface(), eros_vis);
-        cv::medianBlur(eros_handler.eros.getSurface(), eros_vis, 3);
-        cv::GaussianBlur(eros_vis, eros_vis, cv::Size(3, 3), 0);
-        cv::cvtColor(eros_handler.eros.getSurface(), eros_vis, cv::COLOR_GRAY2BGR);
-        cv::resize(eros_vis, eros_vis, img_size);
+
+        cv::Mat img32 = scarf_handler.scarf.getSurface();
+        cv::Mat img8U;
+        img32.convertTo(img8U, CV_8U, 255);
+        cv::cvtColor(img8U, scarf_vis, cv::COLOR_GRAY2BGR);
+        cv::resize(scarf_vis, scarf_vis, img_size);
         cv::cvtColor(proj_rgb, proj_vis, cv::COLOR_GRAY2BGR);
-        if(vis_type == 0)
-            vis = proj_vis + eros_vis;
-        else
-            vis = proj_vis + eros_handler.event_image;
-        eros_handler.event_image.setTo(0);
+        vis = proj_vis + scarf_vis;
+
         //cv::rectangle(vis, img_handler.img_roi, cv::Scalar(255, 255, 255));
         // static cv::Mat warps_t = cv::Mat::zeros(100, 100, CV_8U);
         // warps_t = warp_handler.create_translation_visualisation();
@@ -248,7 +254,7 @@ public:
 
         // yInfo() << state[0] << state[1] << state[2] << state[3] << state[4]
         //         << state[5] << state[6];
-        if(vid_writer.isOpened() && eros_handler.tic > 0)
+        if(vid_writer.isOpened() && scarf_handler.tic > 0)
             vid_writer << vis;
         static int updated_divisor=0;
         if (updated_divisor++ % 10 == 0) {
@@ -314,7 +320,7 @@ public:
                 warp_handler.make_predictive_warps();
 
             // get the current EROS
-            img_handler.setProcObs(eros_handler.eros.getSurface());
+            img_handler.setProcObs(scarf_handler.scarf.getSurface());
             warp_handler.proc_obs = img_handler.proc_obs;
 
             // perform the comparison
@@ -387,9 +393,9 @@ public:
             // }
 
             //get the EROS
-            dataset_time = eros_handler.tic;
+            dataset_time = scarf_handler.tic;
             static cv::Mat scaled_eros = cv::Mat::zeros(img_size, CV_8U);
-            cv::resize(eros_handler.eros.getSurface(), scaled_eros, scaled_eros.size());
+            cv::resize(scarf_handler.scarf.getSurface(), scaled_eros, scaled_eros.size());
             img_handler.setProcObs(scaled_eros);
             //warp_handler.proc_obs = img_handler.proc_obs;
             img_handler.proc_obs.copyTo(warp_handler.proc_obs);
@@ -620,7 +626,7 @@ public:
     bool close() override
     {
         yInfo() << "waiting for eros handler ... ";
-        eros_handler.stop();
+        scarf_handler.stop();
         yInfo() << "waiting for worker threads ... ";
         if(parallel_method) {
             warp_worker.join();
