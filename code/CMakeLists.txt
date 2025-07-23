@@ -24,7 +24,7 @@ find_package(event-driven REQUIRED)
 #                          INSTALL_NAME_DIR "${CMAKE_INSTALL_FULL_LIBDIR}"
 #                          USE_LINK_PATH)
 
-add_executable(${PROJECT_NAME} offline.cpp image_processing.h projection.h erosdirect.h comparison.h)
+add_executable(${PROJECT_NAME} main.cpp image_processing.h projection.h erosdirect.h comparison.h)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 #target_compile_options(sixdofobject PRIVATE -Werror -Wall -Wextra)
 target_link_libraries(${PROJECT_NAME} PRIVATE  YARP_init

@@ -82,7 +82,7 @@ public:
     ev::window<ev::AE> input_port;
     ev::EROS eros;
     std::thread eros_worker;
-    double tic{-1};
+    double tic{-1}, dt{-1};
     cv::Mat event_image;
 
     void erosUpdate() 
@@ -90,6 +90,8 @@ public:
         while (!input_port.isStopping()) {
             ev::info my_info = input_port.readAll(true);
             tic = my_info.timestamp;
+            static double t0 = my_info.timestamp;
+            dt = my_info.timestamp -t0;
             for(auto &v : input_port) {
                 eros.update(v.x, v.y);
                 if(v.p)
@@ -131,12 +133,15 @@ public:
     ev::SCARF scarf;
     std::thread scarf_worker;
     double tic{-1};
+    double dt{-1}; 
 
     void scarfUpdate() 
     {
         while (!input_port.isStopping()) {
             ev::info my_info = input_port.readAll(true);
+            static double t0 = my_info.timestamp; 
             tic = my_info.timestamp;
+            dt = my_info.timestamp - t0; 
             for(auto &v : input_port) {
                 scarf.update(v.x, v.y, v.p);
             }
