@@ -27,40 +27,6 @@ public:
     cv::Mat proc_obs;  //final eros to compare to 
     cv::Mat f,f1,f2;
 
-    void make_template(const cv::Mat &input, cv::Mat &output) {
-        static cv::Mat canny_img, f1, f2, pos_hat, neg_hat;
-        static cv::Size pblur(blur, blur);
-        static cv::Size nblur(2*blur-1, 2*blur-1);
-        static double minval, maxval;
-
-        //cv::GaussianBlur(input, input, cv::Size(3, 3), 0);
-        //cv::normalize(input, input, 0, 255, cv::NORM_MINMAX);
-        //cv::Sobel(input, 
-
-        input.convertTo(canny_img, CV_32F, 0.003921569);
-        cv::Sobel(canny_img, f1, CV_32F, 1, 0);
-        cv::Sobel(canny_img, f2, CV_32F, 0, 1);
-        f = cv::abs(f1)+cv::abs(f2);
-        f = (cv::max(f, 0.0) + cv::max(-f, 0.0));
-        cv::minMaxLoc(f, &minval, &maxval);
-        cv::threshold(f, f, maxval*0.05, 0, cv::THRESH_TRUNC);
-
-
-        // cv::imshow("temp", f+0.5);
-        //f.copyTo(output);
-        // return;
-        // cv::Canny(input, canny_img, canny_thresh, canny_thresh*canny_scale, 3);
-        // canny_img.convertTo(f, CV_32F);
-
-        output = f; 
-        // cv::GaussianBlur(f, pos_hat, pblur, 0);
-        // cv::GaussianBlur(f, neg_hat, nblur, 0);
-        // output = pos_hat - neg_hat;
-        // cv::minMaxLoc(output, &minval, &maxval);
-        // double scale_factor = 1.0 / (2 * std::max(fabs(minval), fabs(maxval)));
-        // output *= scale_factor;
-    }
-
     void make_template_Mex(const cv::Mat &input, cv::Mat &output) {
         static cv::Mat canny_img, pos_hat, neg_hat;
         static cv::Size pblur(blur, blur);
@@ -184,10 +150,10 @@ public:
     {
         //eros(roi) is processed as full image size and then resized
         //otherwise it has too many artefacts
-        static cv::Mat roi_32f;// = cv::Mat::zeros(proc_size, CV_32F);
+        // static cv::Mat roi_32f;// = cv::Mat::zeros(proc_size, CV_32F);
         proc_obs = 0;
-        process_eros(image(o_img_roi), roi_32f);
-        cv::resize(roi_32f, proc_obs(o_proc_roi), o_proc_roi.size(), 0, 0, cv::INTER_CUBIC);
+        // process_eros(image(o_img_roi), roi_32f);
+        cv::resize(image(o_img_roi), proc_obs(o_proc_roi), o_proc_roi.size(), 0, 0, cv::INTER_CUBIC);
     }
 
     // cv::Mat make_visualisation(cv::Mat full_obs) {
