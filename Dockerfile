@@ -1,9 +1,9 @@
-#FROM ubuntu:20.04
 FROM nvidia/opengl:1.2-glvnd-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND noninteractive
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
-
+ENV LD_LIBRARY_PATH=/usr/lib/wsl/lib
+ENV LIBVA_DRIVER_NAME=d3d12
 ARG CODE_DIR=/usr/local/src
 
 RUN apt update
@@ -84,6 +84,26 @@ RUN cd $CODE_DIR && \
 
 EXPOSE 10000/tcp 10000/udp
 RUN yarp check
+
+# dv-processing
+# Add toolchain PPA and install gcc-13/g++-13
+RUN apt update && \
+    apt install -y software-properties-common && \
+    add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    apt update && \
+    apt install -y gcc-13 g++-13
+
+# Add inivation PPA and install dv-processing dependencies
+RUN add-apt-repository ppa:inivation-ppa/inivation && \
+    apt-get update && \
+    apt-get install -y \
+        boost-inivation \
+        libcaer-dev \
+        libfmt-dev \
+        liblz4-dev \
+        libzstd-dev \
+        libssl-dev && \
+    apt-get -y install dv-processing
 
 
 # event-driven
