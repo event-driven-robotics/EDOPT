@@ -6,16 +6,10 @@ services:
     environment:
       - DISPLAY=${DISPLAY}
       - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}
-      - CC=gcc-13
-      - CXX=g++-13
-      - BOOST_ROOT=/opt/inivation/boost
-      - BOOST_INCLUDEDIR=/opt/inivation/boost/include
-      - BOOST_LIBRARYDIR=/opt/inivation/boost/lib
     volumes:
       - /dev/bus/usb:/dev/bus/usb
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /usr/lib/wsl:/usr/lib/wsl
-      - .:/app
     network_mode: host
     devices:
       - /dev/dxg:/dev/dxg

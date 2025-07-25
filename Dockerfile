@@ -105,6 +105,12 @@ RUN add-apt-repository ppa:inivation-ppa/inivation && \
         libssl-dev && \
     apt-get -y install dv-processing
 
+ENV CC=gcc-13
+ENV CXX=g++-13
+ENV BOOST_ROOT=/opt/inivation/boost
+ENV BOOST_INCLUDEDIR=/opt/inivation/boost/include
+ENV BOOST_LIBRARYDIR=/opt/inivation/boost/lib
+
 
 # event-driven
 ARG ED_VERSION=main
