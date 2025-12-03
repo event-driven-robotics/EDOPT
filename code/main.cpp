@@ -14,6 +14,8 @@ using namespace yarp::os;
 #include "comparison.h"
 #include "image_processing.h"
 
+#include "ROScommunication.h"
+
 //__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia 
 
 
@@ -44,6 +46,7 @@ private:
     //ARESfromYARP eros_handler;
     imageProcessing img_handler;
     warpManager warp_handler;
+    YarpToRos ros_publish;
 
     //internal variables
     SICAD* si_cad;
@@ -122,6 +125,8 @@ public:
         warp_handler.create_Ms(dp);
         warp_handler.set_current(state);
         img_handler.initialise(proc_size, blur, canny_thresh, canny_scale);
+
+        ros_publish.initPublisher(); 
 
         proj_rgb = cv::Mat::zeros(img_size, CV_8UC1);
         proj_32f = cv::Mat::zeros(img_size, CV_32F);
@@ -328,6 +333,8 @@ public:
                 //updated = warp_handler.update_from_max();
                 // state = warp_handler.state_current;
                 //step = true;
+                ros_publish.publishTargetPos(warp_handler.state_current[0],warp_handler.state_current[1], warp_handler.state_current[2], warp_handler.state_current[3], warp_handler.state_current[4], warp_handler.state_current[5], warp_handler.state_current[6]);
+
             }
             warp_count++;
         }
@@ -396,11 +403,15 @@ public:
             double dtoc_eros = Time::now();
 
             warp_handler.score_predictive_warps();
+            state = warp_handler.state_current;
+
             if(run) {
                 //updated = warp_handler.update_from_max();
                 //updated = warp_handler.update_all_possible();
                 updated = warp_handler.update_heuristically();
                 state = warp_handler.state_current;
+                ros_publish.publishTargetPos(warp_handler.state_current[0]*0.001,-warp_handler.state_current[1]*0.001, -warp_handler.state_current[2]*0.001, warp_handler.state_current[3], warp_handler.state_current[4], warp_handler.state_current[5], warp_handler.state_current[6]);
+                //ros_publish.publishTargetPos(warp_handler.state_current[0]*0.001, -warp_handler.state_current[1]*0.001, -warp_handler.state_current[2]*0.001, sin(0*0.5), 0, 0, cos(0*0.5));
             }
             
             double dtoc_warp = Time::now();
