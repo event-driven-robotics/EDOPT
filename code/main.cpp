@@ -410,7 +410,7 @@ public:
                 //updated = warp_handler.update_all_possible();
                 updated = warp_handler.update_heuristically();
                 state = warp_handler.state_current;
-                ros_publish.publishTargetPos(warp_handler.state_current[0]*0.001,-warp_handler.state_current[1]*0.001, -warp_handler.state_current[2]*0.001, warp_handler.state_current[3], warp_handler.state_current[4], warp_handler.state_current[5], warp_handler.state_current[6]);
+                ros_publish.publishTargetPos(warp_handler.state_current[0]*0.001,warp_handler.state_current[1]*0.001, warp_handler.state_current[2]*0.001, warp_handler.state_current[3], warp_handler.state_current[4], warp_handler.state_current[5], warp_handler.state_current[6]);
                 //ros_publish.publishTargetPos(warp_handler.state_current[0]*0.001, -warp_handler.state_current[1]*0.001, -warp_handler.state_current[2]*0.001, sin(0*0.5), 0, 0, cos(0*0.5));
             }
             
