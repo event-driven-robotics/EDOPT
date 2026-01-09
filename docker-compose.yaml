@@ -1,18 +1,14 @@
 services:
-  testedopt:
+  edopt:
     image: edopt:latest
     container_name: edopt
     privileged: true
-    environment:
-      - DISPLAY=${DISPLAY}
-      - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}
     volumes:
       - /dev/bus/usb:/dev/bus/usb
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - /usr/lib/wsl:/usr/lib/wsl
+      - /tmp/.X11-unix/:/tmp/.X11-unix
+    environment:
+      - DISPLAY=unix$DISPLAY
     network_mode: host
-    devices:
-      - /dev/dxg:/dev/dxg
     deploy:
       resources:
         reservations:
@@ -20,5 +16,4 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    stdin_open: true
-    tty: true
+    command: sleep infinity

@@ -38,16 +38,12 @@ RUN apt update && apt install -y \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-libav
 
-RUN echo "deb [arch=amd64 trusted=yes] https://apt.prophesee.ai/dists/public/b4b3528d/ubuntu focal sdk" >> /etc/apt/sources.list &&\
-    apt update
-
 RUN apt install -y \
     libcanberra-gtk-module \
     mesa-utils \
     ffmpeg \
     libboost-program-options-dev \
-    libopencv-dev \
-    metavision-sdk
+    libopencv-dev
 
 #my favourites
 RUN apt update && apt install -y \
@@ -115,7 +111,8 @@ ENV BOOST_LIBRARYDIR=/opt/inivation/boost/lib
 # event-driven
 ARG ED_VERSION=main
 RUN cd $CODE_DIR &&\
-    git clone --depth 1 --branch $ED_VERSION https://github.com/robotology/event-driven.git &&\
+    git clone --depth 1 --branch $ED_VERSION https://github.com/jorou125/event-driven-DVXplorerMicro.git &&\
+    mv event-driven-DVXplorerMicro event-driven && \
     cd event-driven &&\
     mkdir build && cd build &&\
     cmake .. &&\
@@ -139,7 +136,8 @@ RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
 ARG GIT_BRANCH=main
 RUN cd $CODE_DIR &&\
-    git clone https://github.com/event-driven-robotics/EDOPT.git &&\
+    git clone https://github.com/jorou125/DV-EDOPT.git &&\
+    mv DV-EDOPT EDOPT &&\
     cd EDOPT &&\
     git checkout $GIT_BRANCH
 
