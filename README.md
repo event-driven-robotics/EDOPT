@@ -60,7 +60,7 @@ yarpserver
 Terminal 2 (on docker container)
 ```
 ## if you do not have yarp config
-yarp config {YOUR YARP IPADDRESS} {PORT}
+yarp conf {YOUR YARP IPADDRESS} {PORT}
 yarp namespace {NAMESPACE}
 yarp detect --write
 ## Run atis-bridge-sdk to receive event stream
