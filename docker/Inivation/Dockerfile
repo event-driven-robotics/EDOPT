@@ -2,8 +2,7 @@ FROM nvidia/opengl:1.2-glvnd-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND noninteractive
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
-ENV LD_LIBRARY_PATH=/usr/lib/wsl/lib
-ENV LIBVA_DRIVER_NAME=d3d12
+
 ARG CODE_DIR=/usr/local/src
 
 RUN apt update
@@ -136,8 +135,7 @@ RUN ssh-keyscan github.com > /root/.ssh/known_hosts
 
 ARG GIT_BRANCH=main
 RUN cd $CODE_DIR &&\
-    git clone https://github.com/jorou125/DV-EDOPT.git &&\
-    mv DV-EDOPT EDOPT &&\
+    git clone https://github.com/event-driven-robotics/EDOPT.git &&\
     cd EDOPT &&\
     git checkout $GIT_BRANCH
 
