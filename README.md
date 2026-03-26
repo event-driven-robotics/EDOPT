@@ -27,10 +27,13 @@ Three simultaneous computations:
 
 ```
 cd EDOPT
-docker build -t edopt:latest .
+docker build -f docker/Prophesee/Dockerfile -t edopt:latest .
 
 ## if you want to build another remote branch for debugging ...
-docker build -t edopt:latest --build-arg GIT_BRANCH=your/specified/remote/branch .
+docker build -f docker/Prophesee/Dockerfile -t edopt:latest --build-arg GIT_BRANCH=your/specified/remote/branch .
+
+## if you want to use inivation library ...
+docker build -f docker/Inivation/Dockerfile -t edopt:latest .
 ```
 ### Make and enter the container using:
 
